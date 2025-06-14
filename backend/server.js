@@ -36,17 +36,19 @@ If a field is not identifiable, return "Not Available".
   "name": "[Medicine Name]",
   "manufacturer": "[Manufacturer]",
   "category": "[e.g., Painkiller, Antibiotic]",
-  "description": "[Brief description]",
-  "howItWorks": "[How it works]",
+  "description": "[what is this medicine about]",
+  "howItWorks": "[How it works to help patient]",
   "dosage": {
-    "adults": "[Adult dosage]",
-    "teens": "[Teenage dosage]",
-    "children": "[Children dosage]"
+    "adults": "[The general recommended dosage for adults]",
+    "teens": "[The general recommended dosage for teenagers]",
+    "children": "[The general recommended dosage for children]"
   },
-  "administration": "[How to take it]",
+  "administration": "[Brief explanation of how to take it]",
   "precautions": [
-    "[Precaution 1]",
-    "[Precaution 2]"
+    "[Usage Precaution 1]",
+    "[Usage Precaution 2]",
+    "[Usage Precaution 3]",
+    "[...]"
   ]
 }`;
 
