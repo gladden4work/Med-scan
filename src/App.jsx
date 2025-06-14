@@ -40,11 +40,9 @@ const MediScanApp = () => {
     ]
   };
 
-  const handleImageCapture = (imageData) => {
-    // For a real app, this would come from a camera API.
-    // Let's use a real placeholder for demonstration.
-    setCapturedImage('https://picsum.photos/400/300');
-    setCurrentPage('preview');
+  const handleImageCapture = () => {
+    // On mobile, this could trigger the camera. For desktop, we'll open the file selector.
+    fileInputRef.current?.click();
   };
 
   const handleFileUpload = (event) => {
@@ -70,7 +68,10 @@ const MediScanApp = () => {
 
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash-latest',
+        tools: [{googleSearchRetrieval: {}}],
+      });
 
       const imagePart = {
         inlineData: {
