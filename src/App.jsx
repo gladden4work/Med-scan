@@ -70,7 +70,6 @@ const MediScanApp = () => {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash-preview-04-17',
-        tools: [{googleSearchRetrieval: {}}],
       });
 
       const imagePart = {
@@ -347,33 +346,61 @@ const MediScanApp = () => {
     <span className="inline-block bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full font-semibold">{medicineData.category}</span>
   </div>
   <div className="mb-4">
-    <h2 className="font-semibold text-lg mb-1">Description</h2>
-    <p className="text-gray-700">{medicineData.description}</p>
+  <div className="flex items-center gap-2 mb-1">
+    <Info className="w-5 h-5 text-blue-500" />
+    <h2 className="font-semibold text-lg">Description</h2>
   </div>
-  <div className="mb-4">
-    <h2 className="font-semibold text-lg mb-1">How It Works</h2>
-    <p className="text-gray-700">{medicineData.howItWorks}</p>
+  <p className="text-gray-700">{medicineData.description}</p>
+</div>
+<hr className="my-4 border-gray-200" />
+<div className="mb-4">
+  <div className="flex items-center gap-2 mb-1">
+    <Search className="w-5 h-5 text-green-500" />
+    <h2 className="font-semibold text-lg">How It Works</h2>
   </div>
-  <div className="mb-4">
-    <h2 className="font-semibold text-lg mb-1">Dosage</h2>
-    <ul className="text-gray-700 list-disc list-inside">
-      <li><span className="font-medium">Adults:</span> {medicineData.dosage.adults}</li>
-      <li><span className="font-medium">Teens:</span> {medicineData.dosage.teens}</li>
-      <li><span className="font-medium">Children:</span> {medicineData.dosage.children}</li>
-    </ul>
+  <p className="text-gray-700">{medicineData.howItWorks}</p>
+</div>
+<hr className="my-4 border-gray-200" />
+<div className="mb-4">
+  <div className="flex items-center gap-2 mb-1">
+    <Heart className="w-5 h-5 text-pink-500" />
+    <h2 className="font-semibold text-lg">Dosage</h2>
   </div>
-  <div className="mb-4">
-    <h2 className="font-semibold text-lg mb-1">How to Take</h2>
-    <p className="text-gray-700">{medicineData.administration}</p>
+  <ul className="text-gray-700 list-none ml-0">
+    <li className="flex items-center gap-2 mb-1">
+      <User className="w-4 h-4 text-gray-500" />
+      <span className="font-medium">Adults:</span> {medicineData.dosage.adults}
+    </li>
+    <li className="flex items-center gap-2 mb-1">
+      <User className="w-4 h-4 text-blue-500" />
+      <span className="font-medium">Teens:</span> {medicineData.dosage.teens}
+    </li>
+    <li className="flex items-center gap-2 mb-1">
+      <User className="w-4 h-4 text-orange-500" />
+      <span className="font-medium">Children:</span> {medicineData.dosage.children}
+    </li>
+  </ul>
+</div>
+<hr className="my-4 border-gray-200" />
+<div className="mb-4">
+  <div className="flex items-center gap-2 mb-1">
+    <ArrowRight className="w-5 h-5 text-purple-500" />
+    <h2 className="font-semibold text-lg">How to Take</h2>
   </div>
-  <div className="mb-4">
-    <h2 className="font-semibold text-lg mb-1">Precautions</h2>
-    <ul className="text-gray-700 list-disc list-inside">
-      {medicineData.precautions.map((prec, idx) => (
-        <li key={idx}>{prec}</li>
-      ))}
-    </ul>
+  <p className="text-gray-700">{medicineData.administration}</p>
+</div>
+<hr className="my-4 border-gray-200" />
+<div className="mb-4">
+  <div className="flex items-center gap-2 mb-1">
+    <AlertTriangle className="w-5 h-5 text-yellow-500" />
+    <h2 className="font-semibold text-lg">Precautions</h2>
   </div>
+  <ul className="text-gray-700 list-disc list-inside">
+    {medicineData.precautions.map((prec, idx) => (
+      <li key={idx}>{prec}</li>
+    ))}
+  </ul>
+</div>
   <div className="flex gap-4 mt-6">
     <button
       onClick={handleAddToMedications}
