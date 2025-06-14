@@ -3,14 +3,11 @@
 import React, { useState, useRef } from 'react';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
-  Check, AlertTriangle, User, Heart, X, ChevronLeft, Info
+  Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock
 } from 'lucide-react';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const MediScanApp = () => {
-  // ... (the rest of the MediScanApp component code you provided) ...
-  // All the state, functions, and page components go here.
-  // I will just add the full code here for completeness.
-
   const [currentPage, setCurrentPage] = useState('camera');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -18,6 +15,7 @@ const MediScanApp = () => {
   const [medications, setMedications] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [medicineData, setMedicineData] = useState(null);
+  const [apiKey, setApiKey] = useState('');
   const fileInputRef = useRef(null);
 
   // Mock medicine data
@@ -61,14 +59,66 @@ const MediScanApp = () => {
     }
   };
 
-  const analyzeMedicine = () => {
+    const analyzeMedicine = async () => {
+    if (!apiKey) {
+      alert('Please enter your Google AI API key first.');
+      return;
+    }
+
     setIsAnalyzing(true);
     setCurrentPage('results');
-    // Simulate API call
-    setTimeout(() => {
-      setMedicineData(mockMedicineData);
-      setIsAnalyzing(false);
-    }, 2000);
+
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const imagePart = {
+        inlineData: {
+          data: capturedImage.split(',')[1], // Base64-encoded image data
+          mimeType: 'image/jpeg',
+        },
+      };
+
+      const prompt = `
+        You are an expert in pharmacology and medicine identification. Analyze the provided image of a medication.
+        Return a JSON object with the following structure. Do not include any other text or markdown formatting.
+        If a field is not identifiable, return "Not Available".
+
+        {
+          "name": "[Medicine Name]",
+          "manufacturer": "[Manufacturer]",
+          "category": "[e.g., Painkiller, Antibiotic]",
+          "description": "[Brief description]",
+          "howItWorks": "[How it works]",
+          "dosage": {
+            "adults": "[Adult dosage]",
+            "teens": "[Teenage dosage]",
+            "children": "[Children dosage]"
+          },
+          "administration": "[How to take it]",
+          "precautions": [
+            "[Precaution 1]",
+            "[Precaution 2]"
+          ]
+        }
+      `;
+
+      const result = await model.generateContent([prompt, imagePart]);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Clean the response to get only the JSON part
+      const jsonText = text.replace(/```json|```/g, '').trim();
+      const parsedData = JSON.parse(jsonText);
+
+      setMedicineData(parsedData);
+    } catch (error) {
+      console.error('AI Analysis Error:', error);
+      // Fallback to a generic error message or mock data
+      setMedicineData(null); 
+    }
+
+    setIsAnalyzing(false);
   };
 
   const handleAddToMedications = () => {
@@ -133,6 +183,16 @@ const MediScanApp = () => {
 
           {/* Action Buttons */}
           <div className="space-y-4">
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter Google AI API Key"
+                  className="w-full bg-white border-2 border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             <button
               onClick={handleImageCapture}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-2xl flex items-center justify-center space-x-3 transition-all transform hover:scale-[1.02]"
