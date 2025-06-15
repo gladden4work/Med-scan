@@ -90,8 +90,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 
 ### Phase 3: Core Features & UX
 - [ ] Replace mock image capture with real camera/file input handling.
-- [ ] Configure Playwright & screenshot tooling (install browsers, set paths).
-- [ ] Implement Profile page with authentication flow.
+- [x] Implement Profile page with authentication flow (sign in & sign-up).
 - [ ] Persist medications list (local storage or backend).
 - [ ] Add unit & E2E tests; set up CI.
 
