@@ -67,12 +67,12 @@ const MediScanApp = () => {
     setCurrentPage('results');
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/analyze-medicine`, {
+      const response = await fetch(`${BACKEND_URL}/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ image: imageData }),
+        body: JSON.stringify({ imageBase64: imageData }),
       });
 
       if (!response.ok) {
