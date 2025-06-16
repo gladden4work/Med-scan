@@ -6,6 +6,6 @@
     "dev:all": "concurrently \"npm run dev --prefix mediscan-app\" \"npm run start --prefix backend\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.0"
+    "concurrently": "^8.2.2"
   }
 }

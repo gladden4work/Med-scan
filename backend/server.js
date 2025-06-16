@@ -6,7 +6,7 @@ import 'dotenv/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
