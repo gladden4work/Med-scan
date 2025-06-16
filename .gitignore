@@ -4,7 +4,7 @@
 /backend/node_modules
 
 # Environment variables
-/backend/.env
+#/backend/.env  # temporarily committed for portability; remove before production
 
 # Build artifacts
 /mediscan-app/dist

@@ -58,7 +58,8 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 ## Lessons Learned
 - **Node.js Module Types**: When a Node.js backend server fails with module-related errors (`require is not defined` or `Cannot use import`), it's crucial to ensure consistency. The `backend/package.json` must include `"type": "module"` if the server code (`server.js`) uses ES Module `import` syntax. If it uses CommonJS `require()` syntax, `"type": "module"` must be removed. A mismatch between these two causes runtime errors.
 - **Supabase Auth Integration**: Adding authentication with Supabase is fast, but requires careful handling of environment variables. The frontend `.env` needs the correct `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (never commit these long-term). Sign-up flow requires email confirmation by default; users must check their inbox to activate their account. The React context/provider pattern is effective for global auth state. Always test both Google and email/password flows.
-
+- **Monorepo/Script Management**: After flattening the repo and removing the submodule, the root `package.json` (and the `dev:all` script) was lost. Now, frontend and backend must be started in separate terminals (`npm run dev` in `mediscan-app`, `npm run start` in `backend`). If you want a single command, you must recreate a root `package.json` with a script like `concurrently`.
+- **Duplicate Directories Pitfall**: Accidentally committing multiple copies of the frontend (`tmp-app/…`, `mediscan-app/legacy-app/`) can cause the dev server to serve the wrong version, leading to missing features. Always consolidate to a single source-of-truth folder and delete legacy copies immediately after migrations.
 ## File Roles
 - `plan.md`: This document, outlining project goals and tasks.
 - `backend/server.js`: The Express backend server that proxies requests to the Google AI API, keeping the API key secure.
@@ -71,7 +72,8 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 ## Task List
 
 ### Phase 1: Initial Setup & UI
-- [x] Create Vite React project (`mediscan-app`).
+- [x] Create new branch `feature/initial-setup` in Med-scan-cursor repo.
+- [x] Push consolidated code (including .env) to new branch `feature/auth-restoration` for portability.
 - [x] Install & configure Tailwind CSS v3, PostCSS, Autoprefixer.
 - [x] Install `lucide-react` icon package.
 - [x] Replace boilerplate with full `MediScanApp` component.

@@ -67,7 +67,7 @@ MediScan is a web app for identifying medicines, supplements, and equipment from
 
 ## Lessons Learned
 - **Node.js Module Types:** If backend fails with `require`/`import` errors, ensure `backend/package.json` matches your code style (`type: "module"` for ES modules, omit for CommonJS).
-- **Concurrent Dev:** Use `npm run dev:all` for a seamless workflow.
+- **Concurrent Dev:** After flattening the repo and removing the submodule, there is no longer a root `package.json` or a `dev:all` script. You must start the frontend and backend in separate terminals: `npm run dev` in `mediscan-app` and `npm run start` in `backend`. If you want a single command, you must add a root `package.json` with a tool like `concurrently`.
 - **Legacy Code:** All new work is in `mediscan-app/`; root-level legacy code is archived.
 
 ## Current Status

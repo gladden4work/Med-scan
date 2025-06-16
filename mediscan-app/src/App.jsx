@@ -1,6 +1,8 @@
 // Paste this entire block into src/App.jsx
 
 import React, { useState, useRef } from 'react';
+import { supabase } from './supabaseClient.js';
+import { useAuth } from './AuthContext.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
   Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock
@@ -424,7 +426,88 @@ const MediScanApp = () => {
   };
 
   // Profile/Login Page
-  const ProfilePage = () => { /* ... ProfilePage code ... */ return <div>Profile Page</div> };
+  const ProfilePage = () => {
+  const { user, loading } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [isSignup, setIsSignup] = useState(false);
+
+  if (loading) return <div className="p-8 text-center">Loading...</div>;
+
+  if (user) {
+    return (
+      <div className="p-8 max-w-md mx-auto text-center space-y-4">
+        <p className="text-lg font-semibold">Signed in as {user.email}</p>
+        <button
+          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+          onClick={() => supabase.auth.signOut()}
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    try {
+      if (isSignup) {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Check your email for a confirmation link.');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="p-8 max-w-md mx-auto">
+      <h2 className="text-xl font-semibold mb-4 text-center">{isSignup ? 'Sign Up' : 'Sign In'}</h2>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          type="email"
+          placeholder="Email"
+          className="w-full border rounded px-3 py-2"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          className="w-full border rounded px-3 py-2"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"
+        >
+          {submitting ? 'Submitting...' : isSignup ? 'Create account' : 'Sign in'}
+        </button>
+      </form>
+      <button
+        className="mt-4 text-sm text-blue-600 underline"
+        onClick={() => setIsSignup(!isSignup)}
+      >
+        {isSignup ? 'Have an account? Sign in' : "Don't have an account? Sign up"}
+      </button>
+    </div>
+  );
+};
 
   // My Medications Page
   const MedicationsPage = () => { /* ... MedicationsPage code ... */ return <div>Medications Page</div>};
