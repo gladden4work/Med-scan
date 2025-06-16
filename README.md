@@ -8,11 +8,14 @@ MediScan is a modern web application that helps users identify medicines by taki
 - **Passwordless Authentication:** Secure sign-in with Google OAuth or Email OTP (no passwords required)
 - **Medicine Details:** Comprehensive information including name, manufacturer, usage, dosage, and precautions
 - **Personal Medication Tracker:** Save and manage your medications list
+- **Scan History Management:** Automatic saving and organized viewing of all medicine scans with delete functionality
 - **User Profile Management:** Complete profile page with credit tracking, medication history, and app settings
+- **Secure Sign-Out:** Clean session termination with state reset
 - **Platform-Aware App Rating:** Automatically detects iOS/Android and redirects to appropriate app store
 - **Direct Contact Support:** Built-in email integration for user feedback and support
 - **Mobile-First Design:** Responsive, modern UI built with Tailwind CSS
 - **Fast & Secure:** Backend API proxy keeps your API keys safe
+- **Cloudflare-Ready Architecture:** Database and API design prepared for Cloudflare Workers migration
 
 ## Tech Stack
 
@@ -52,28 +55,40 @@ Copy the example environment files and add your credentials:
 ```bash
 # Backend environment
 cp backend/.env.example backend/.env
-# Add your Google API key to backend/.env
 
 # Frontend environment  
 cp mediscan-app/.env.example mediscan-app/.env
-# Add your Supabase credentials to mediscan-app/.env
 ```
 
-**Required Environment Variables:**
-
-`backend/.env`:
+**Backend `.env` file:**
 ```env
-GOOGLE_API_KEY=your_google_api_key_here
+GOOGLE_AI_API_KEY=your_google_ai_api_key_here
+PORT=3001
 ```
 
-`mediscan-app/.env`:
+**Frontend `.env` file:**
 ```env
 VITE_SUPABASE_URL=your_supabase_url_here
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 VITE_BACKEND_URL=http://localhost:3001
 ```
 
-### 3. Start the Application
+### 3. Database Setup (Supabase)
+Run the SQL migration to create the scan history table:
+
+1. Go to your Supabase project dashboard
+2. Navigate to SQL Editor
+3. Copy and paste the contents of `database/scan_history_table.sql`
+4. Execute the query to create the table and set up Row Level Security
+
+This creates a `scan_history` table with:
+- User-specific scan records with RLS policies
+- Automatic timestamps and UUID primary keys
+- JSONB storage for complete medicine analysis data
+- Optimized indexes for performance
+- Cloudflare D1 compatibility for future migration
+
+### 4. Start the Application
 ```bash
 npm run dev:all
 ```
@@ -82,7 +97,7 @@ This unified command starts both:
 - **Frontend:** React app on `http://localhost:5173` (or next available port)
 - **Backend:** Express server on `http://localhost:3001`
 
-### 4. Open & Use
+### 5. Open & Use
 Navigate to the frontend URL shown in your terminal and start identifying medicines!
 
 ## Authentication
@@ -109,10 +124,18 @@ MediScan v2 uses **passwordless authentication** for enhanced security:
 - **Credit System:** Shows daily credit limit (1,714) with refresh schedule
 - **Medication Management:** 
   - Quick access to "My Medication" saved list
-  - "Scan History" for previous medicine scans (coming soon)
+  - "Scan History" for viewing and managing all previous scans
+- **Scan History Features:**
+  - Automatic saving of successful medicine analyses
+  - Date-grouped organization (e.g., "Friday, June 13")
+  - Individual scan records with medicine image, name, manufacturer, and timestamp
+  - Delete functionality with confirmation dialog
+  - Empty state guidance for new users
 - **App Information:**
   - "Rate this App" - Platform-aware store redirection
   - "Contact Us" - Direct email to gladden4work@gmail.com
+- **Account Management:**
+  - Secure sign-out with complete state reset
 
 ## Project Structure
 

@@ -108,6 +108,13 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Platform Detection**: Implemented iOS/Android store detection for "Rate this App" feature
 - **Email Integration**: Added `mailto:gladden4work@gmail.com` for Contact Us functionality
 
+### Sign-Out & Scan History Features - COMPLETED
+- **Sign-Out Button**: Added secure sign-out functionality at bottom of profile page
+- **Scan History Page**: Complete scan history with date grouping and delete functionality
+- **Auto-Save Scans**: Successful medicine analyses automatically saved to user's scan history
+- **Database Integration**: Supabase table with RLS policies for secure per-user data storage
+- **Cloudflare-Ready Architecture**: Database schema and API calls designed for future Cloudflare Workers migration
+
 ### New Features Added:
 1. **User Profile Display**
    - Shows user name (from metadata or email) and email address
@@ -121,7 +128,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 
 3. **Medication Section**
    - "My Medication" button (links to existing medications page)
-   - "Scan History" button (placeholder with coming soon alert)
+   - "Scan History" button (now fully functional with complete page)
    - Proper icons and navigation arrows
 
 4. **Information Section**
@@ -129,20 +136,62 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
    - "Contact Us" button with email integration
    - Consistent styling with other sections
 
-5. **Navigation**
+5. **Sign-Out Functionality**
+   - Secure sign-out button at bottom of profile page
+   - Clears all user state and returns to camera page
+   - Proper error handling and user feedback
+
+6. **Scan History Management**
+   - Date-grouped scan history display (e.g., "Friday, June 13")
+   - Individual scan records with medicine image, name, manufacturer, and timestamp
+   - Delete functionality with confirmation dialog
+   - Auto-save successful scans after medicine analysis
+   - Empty state with helpful messaging
+
+7. **Navigation**
    - Back button to return to main camera page
-   - Profile accessible from camera page header
+   - Profile accessible from camera page header (merged duplicate icons)
    - Proper page routing in switch statement
 
 ### File Changes:
-- **Modified**: `src/App.jsx` - Added ProfilePage component and navigation
-- **Icons Added**: Star, Mail, Pill, History, CreditCard from lucide-react
+- **Modified**: `src/App.jsx` - Added ProfilePage component, ScanHistoryPage, sign-out logic, and scan persistence
+- **Created**: `database/scan_history_table.sql` - Supabase table schema with RLS policies
+- **Icons Added**: Star, Mail, Pill, History, CreditCard, LogOut, Trash2 from lucide-react
 
 ### Technical Implementation:
-- Platform detection using `navigator.userAgent` for store redirects
-- Email integration using `window.location.href` with mailto protocol
-- Responsive design with Tailwind CSS
-- Consistent with existing app color scheme and design patterns
+- **Platform Detection**: Using `navigator.userAgent` for store redirects
+- **Email Integration**: Using `window.location.href` with mailto protocol
+- **Database Schema**: Supabase `scan_history` table with UUID primary key, user_id foreign key, JSONB medicine data
+- **Row Level Security**: RLS policies ensure users only access their own scan history
+- **Auto-Save Logic**: `analyzeMedicine` function automatically saves successful scans
+- **State Management**: React state for scan history with useEffect for user-based loading
+- **Delete Functionality**: Confirmation dialog with optimistic UI updates
+- **Date Grouping**: JavaScript date formatting and grouping for organized display
+- **Responsive Design**: Tailwind CSS with consistent app color scheme
+- **Cloudflare Compatibility**: Database design and API patterns ready for Cloudflare Workers migration
+- **Mobile-Ready Architecture**: React components and Supabase integration suitable for React Native conversion
+
+### Database Schema (Cloudflare-Ready):
+```sql
+CREATE TABLE scan_history (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  medicine_name TEXT NOT NULL,
+  manufacturer TEXT,
+  image_url TEXT,
+  medicine_data JSONB,
+  created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE
+);
+```
+
+### Future Mobile & Cloudflare Migration Notes:
+- **Supabase**: Can be replaced with Cloudflare D1 database with minimal code changes
+- **React Components**: Easily convertible to React Native components
+- **API Calls**: Standard fetch() calls compatible with Cloudflare Workers
+- **Authentication**: Supabase Auth can be replaced with Cloudflare Access or custom JWT
+- **Image Storage**: Currently uses base64, can be migrated to Cloudflare R2 storage
+- **State Management**: React hooks pattern works identically in React Native
 
 ## File Roles & Structure
 
@@ -156,7 +205,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - `mediscan-app/src/supabaseClient.js`: Supabase configuration
 - `mediscan-app/src/AuthContext.jsx`: Authentication context provider
 - `mediscan-app/.env`: Frontend environment variables (`VITE_SUPABASE_URL`, etc.)
-- `mediscan-app/package.json`: Frontend dependencies and dev script
+- `mediscan-app/package.json`: Frontend dependencies and scripts, including the `dev:all` script to run both servers.
 
 ### Folders to Remove:
 - `mediscan-app/legacy-app/`: Old v1 code (duplicate, causes confusion)

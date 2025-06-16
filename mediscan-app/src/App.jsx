@@ -1,12 +1,12 @@
 // Paste this entire block into src/App.jsx
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from './supabaseClient.js';
 import { useAuth } from './AuthContext.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
   Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
-  Star, Mail, Pill, History, CreditCard
+  Star, Mail, Pill, History, CreditCard, LogOut, Trash2
 } from 'lucide-react';
 
 const MediScanApp = () => {
@@ -15,6 +15,7 @@ const MediScanApp = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
   const [medications, setMedications] = useState([]);
+  const [scanHistory, setScanHistory] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [medicineData, setMedicineData] = useState(null);
   const fileInputRef = useRef(null);
@@ -61,40 +62,36 @@ const MediScanApp = () => {
     }
   };
 
-  const analyzeMedicine = async (imageBase64) => {
+  const analyzeMedicine = async (imageData) => {
     setIsAnalyzing(true);
-    setMedicineData(null);
+    setCurrentPage('results');
 
     try {
-      // Send image to backend for analysis
-      const response = await fetch(`${BACKEND_URL}/analyze`, {
+      const response = await fetch(`${BACKEND_URL}/api/analyze-medicine`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          imageBase64: imageBase64,
-        }),
+        body: JSON.stringify({ image: imageData }),
       });
 
       if (!response.ok) {
-        throw new Error(`Backend error: ${response.status}`);
+        throw new Error('Failed to analyze medicine');
       }
 
-      const data = await response.json();
+      const result = await response.json();
+      setMedicineData(result);
       
-      if (data.error) {
-        throw new Error(data.error);
+      // Automatically save successful scans to history
+      if (result && user) {
+        await saveScanToHistory(result, imageData);
       }
-
-      setMedicineData(data);
     } catch (error) {
-      console.error('Medicine Analysis Error:', error);
-      // Fallback to mock data for demo purposes
-      setMedicineData(mockMedicineData); 
+      console.error('Error analyzing medicine:', error);
+      setMedicineData(null);
+    } finally {
+      setIsAnalyzing(false);
     }
-
-    setIsAnalyzing(false);
   };
 
   const handleAddToMedications = () => {
@@ -112,6 +109,73 @@ const MediScanApp = () => {
     navigator.clipboard.writeText(shareUrl);
     alert('Share link copied to clipboard!');
   };
+
+  // Load scan history for the current user
+  const loadScanHistory = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('scan_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setScanHistory(data || []);
+    } catch (error) {
+      console.error('Error loading scan history:', error);
+    }
+  };
+
+  // Save scan to history
+  const saveScanToHistory = async (medicineInfo, imageUrl) => {
+    if (!user) return;
+
+    try {
+      const scanRecord = {
+        user_id: user.id,
+        medicine_name: medicineInfo.name,
+        manufacturer: medicineInfo.manufacturer,
+        image_url: imageUrl,
+        medicine_data: medicineInfo,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('scan_history')
+        .insert([scanRecord]);
+
+      if (error) throw error;
+      
+      // Reload scan history
+      loadScanHistory();
+    } catch (error) {
+      console.error('Error saving scan to history:', error);
+    }
+  };
+
+  // Delete scan from history
+  const deleteScanFromHistory = async (scanId) => {
+    try {
+      const { error } = await supabase
+        .from('scan_history')
+        .delete()
+        .eq('id', scanId);
+
+      if (error) throw error;
+      
+      // Reload scan history
+      loadScanHistory();
+    } catch (error) {
+      console.error('Error deleting scan:', error);
+    }
+  };
+
+  // Load scan history when user changes
+  useEffect(() => {
+    loadScanHistory();
+  }, [user]);
 
   // Camera Page Component
   const CameraPage = () => (
@@ -395,6 +459,13 @@ const MediScanApp = () => {
     >
       <Plus className="w-5 h-5" />
       <span>Add to My Medications</span>
+    </button>
+    <button
+      onClick={() => saveScanToHistory(medicineData, capturedImage)}
+      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors"
+    >
+      <History className="w-5 h-5" />
+      <span>Save to Scan History</span>
     </button>
     <button
       onClick={generateShareLink}
@@ -695,6 +766,23 @@ const MediScanApp = () => {
       window.location.href = 'mailto:gladden4work@gmail.com?subject=Med-scan App Feedback';
     };
 
+    const handleSignOut = async () => {
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        
+        // Reset app state
+        setUser(null);
+        setIsLoggedIn(false);
+        setMedications([]);
+        setScanHistory([]);
+        setCurrentPage('camera');
+      } catch (error) {
+        console.error('Error signing out:', error);
+        alert('Error signing out. Please try again.');
+      }
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
@@ -755,10 +843,7 @@ const MediScanApp = () => {
               </button>
               
               <button
-                onClick={() => {
-                  // Placeholder for scan history page
-                  alert('Scan History page coming soon!');
-                }}
+                onClick={() => setCurrentPage('scan-history')}
                 className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div className="flex items-center space-x-3">
@@ -797,6 +882,116 @@ const MediScanApp = () => {
               </button>
             </div>
           </div>
+
+          {/* Sign Out Button */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center justify-center space-x-3 p-4 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+            >
+              <LogOut size={20} />
+              <span className="font-medium">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Scan History Page Component
+  const ScanHistoryPage = () => {
+    const { user } = useAuth();
+
+    // Group scan history by date
+    const groupedHistory = scanHistory.reduce((groups, scan) => {
+      const date = new Date(scan.created_at).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      
+      if (!groups[date]) {
+        groups[date] = [];
+      }
+      groups[date].push(scan);
+      return groups;
+    }, {});
+
+    const handleDeleteScan = async (scanId) => {
+      if (window.confirm('Are you sure you want to delete this scan?')) {
+        await deleteScanFromHistory(scanId);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentPage('profile')}
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-xl font-semibold">Scan History</h1>
+          <div className="w-10"></div>
+        </div>
+
+        <div className="p-6">
+          {Object.keys(groupedHistory).length === 0 ? (
+            <div className="text-center py-12">
+              <History size={48} className="mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500 mb-2">No scan history yet</p>
+              <p className="text-sm text-gray-400">Start scanning medicines to see your history here</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(groupedHistory).map(([date, scans]) => (
+                <div key={date}>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-3">{date}</h2>
+                  <div className="space-y-3">
+                    {scans.map((scan) => (
+                      <div key={scan.id} className="bg-white rounded-lg p-4 shadow-sm flex items-center space-x-4">
+                        {/* Medicine Image */}
+                        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                          {scan.image_url ? (
+                            <img 
+                              src={scan.image_url} 
+                              alt={scan.medicine_name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Pill size={24} className="text-gray-400" />
+                          )}
+                        </div>
+                        
+                        {/* Medicine Info */}
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">{scan.medicine_name}</h3>
+                          <p className="text-sm text-gray-600">{scan.manufacturer}</p>
+                          <p className="text-xs text-gray-400">
+                            {new Date(scan.created_at).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                        
+                        {/* Delete Button */}
+                        <button
+                          onClick={() => handleDeleteScan(scan.id)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -827,6 +1022,8 @@ const MediScanApp = () => {
             return <MedicationsPage />;
           case 'profile':
             return <ProfilePage />;
+          case 'scan-history':
+            return <ScanHistoryPage />;
           default:
             return <CameraPage />;
         }
