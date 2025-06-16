@@ -18,11 +18,10 @@ MediScan is a web application that helps users identify medicines by taking or u
 
 ## How to Run the App
 
+After cloning the repo:
+
 1. **Install dependencies for all parts:**
    ```bash
-   cd mediscan-app
-   npm install
-   cd ../backend
    npm install
    cd ..
    ```
