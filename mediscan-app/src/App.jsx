@@ -119,20 +119,12 @@ const MediScanApp = () => {
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">MediScan</h1>
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setCurrentPage('auth')}
-            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <User className="w-5 h-5 text-gray-600" />
-          </button>
-          <button
-            onClick={() => setCurrentPage('profile')}
-            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <Info className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
+        <button
+          onClick={() => setCurrentPage('profile')}
+          className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+        >
+          <User className="w-5 h-5 text-gray-600" />
+        </button>
       </div>
 
       {/* Main Content */}
@@ -318,7 +310,7 @@ const MediScanApp = () => {
             <span>Back</span>
           </button>
           <button
-            onClick={() => setCurrentPage('auth')}
+            onClick={() => setCurrentPage('profile')}
             className="p-2 rounded-full bg-gray-100"
           >
             <User className="w-5 h-5 text-gray-600" />
