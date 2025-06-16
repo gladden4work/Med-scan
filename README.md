@@ -8,6 +8,9 @@ MediScan is a modern web application that helps users identify medicines by taki
 - **Passwordless Authentication:** Secure sign-in with Google OAuth or Email OTP (no passwords required)
 - **Medicine Details:** Comprehensive information including name, manufacturer, usage, dosage, and precautions
 - **Personal Medication Tracker:** Save and manage your medications list
+- **User Profile Management:** Complete profile page with credit tracking, medication history, and app settings
+- **Platform-Aware App Rating:** Automatically detects iOS/Android and redirects to appropriate app store
+- **Direct Contact Support:** Built-in email integration for user feedback and support
 - **Mobile-First Design:** Responsive, modern UI built with Tailwind CSS
 - **Fast & Secure:** Backend API proxy keeps your API keys safe
 
@@ -90,6 +93,26 @@ MediScan v2 uses **passwordless authentication** for enhanced security:
 - **Email OTP:** Enter your email → receive 6-digit code → verify to sign in
 - **Auto Registration:** New users are automatically registered on first OTP verification
 - **No Passwords:** Enhanced security with no password storage or management
+
+## App Navigation
+
+### Main Pages
+- **Camera Page:** Primary scanning interface with photo capture/upload
+- **Preview Page:** Image confirmation before analysis
+- **Results Page:** Detailed medicine information display
+- **Profile Page:** User account management and app settings
+- **My Medications:** Personal medication tracking and history
+- **Authentication:** Passwordless login with Google OAuth or Email OTP
+
+### Profile Features
+- **User Information:** Display name and email with profile picture placeholder
+- **Credit System:** Shows daily credit limit (1,714) with refresh schedule
+- **Medication Management:** 
+  - Quick access to "My Medication" saved list
+  - "Scan History" for previous medicine scans (coming soon)
+- **App Information:**
+  - "Rate this App" - Platform-aware store redirection
+  - "Contact Us" - Direct email to gladden4work@gmail.com
 
 ## Project Structure
 

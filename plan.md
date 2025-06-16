@@ -99,6 +99,51 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [x] Test "My Medications" functionality
 - [x] Run unified `dev:all` script successfully
 
+## Recent Updates (2025-01-16)
+
+### Profile Page Implementation - COMPLETED
+- **Branch Created**: `feature/profile-page` branch created and pushed to GitHub
+- **Profile Page Added**: Complete profile page with user info, credit display, and navigation sections
+- **Navigation Enhanced**: Added profile button to main camera page header
+- **Platform Detection**: Implemented iOS/Android store detection for "Rate this App" feature
+- **Email Integration**: Added `mailto:gladden4work@gmail.com` for Contact Us functionality
+
+### New Features Added:
+1. **User Profile Display**
+   - Shows user name (from metadata or email) and email address
+   - Profile picture placeholder for future implementation
+   - Clean, modern card-based layout
+
+2. **Credit Limit Card**
+   - Displays current credit count (1,714)
+   - Shows refresh schedule (daily at 08:00)
+   - Gradient blue design matching app theme
+
+3. **Medication Section**
+   - "My Medication" button (links to existing medications page)
+   - "Scan History" button (placeholder with coming soon alert)
+   - Proper icons and navigation arrows
+
+4. **Information Section**
+   - "Rate this App" button with platform detection (iOS App Store/Google Play)
+   - "Contact Us" button with email integration
+   - Consistent styling with other sections
+
+5. **Navigation**
+   - Back button to return to main camera page
+   - Profile accessible from camera page header
+   - Proper page routing in switch statement
+
+### File Changes:
+- **Modified**: `src/App.jsx` - Added ProfilePage component and navigation
+- **Icons Added**: Star, Mail, Pill, History, CreditCard from lucide-react
+
+### Technical Implementation:
+- Platform detection using `navigator.userAgent` for store redirects
+- Email integration using `window.location.href` with mailto protocol
+- Responsive design with Tailwind CSS
+- Consistent with existing app color scheme and design patterns
+
 ## File Roles & Structure
 
 ### Core Files:

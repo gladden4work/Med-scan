@@ -5,7 +5,8 @@ import { supabase } from './supabaseClient.js';
 import { useAuth } from './AuthContext.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
-  Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock
+  Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
+  Star, Mail, Pill, History, CreditCard
 } from 'lucide-react';
 
 const MediScanApp = () => {
@@ -118,12 +119,20 @@ const MediScanApp = () => {
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">MediScan</h1>
-        <button
-          onClick={() => setCurrentPage('auth')}
-          className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-        >
-          <User className="w-5 h-5 text-gray-600" />
-        </button>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setCurrentPage('auth')}
+            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+          >
+            <User className="w-5 h-5 text-gray-600" />
+          </button>
+          <button
+            onClick={() => setCurrentPage('profile')}
+            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+          >
+            <Info className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -670,6 +679,137 @@ const MediScanApp = () => {
     );
   };
 
+  // Profile Page Component
+  const ProfilePage = () => {
+    const { user } = useAuth();
+    
+    const handleRateApp = () => {
+      // Detect platform and redirect to appropriate store
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      
+      if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+        // iOS - redirect to App Store
+        window.open('https://apps.apple.com/app/your-app-id', '_blank');
+      } else if (/android/i.test(userAgent)) {
+        // Android - redirect to Google Play Store
+        window.open('https://play.google.com/store/apps/details?id=your.package.name', '_blank');
+      } else {
+        // Fallback for other platforms
+        alert('Please rate us on your device\'s app store!');
+      }
+    };
+
+    const handleContactUs = () => {
+      window.location.href = 'mailto:gladden4work@gmail.com?subject=Med-scan App Feedback';
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentPage('camera')}
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-xl font-semibold">Profile</h1>
+          <div className="w-10"></div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* User Info Section */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <div className="flex items-center space-x-4">
+              {/* Profile Picture Placeholder */}
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                <User size={32} className="text-gray-400" />
+              </div>
+              
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                </h2>
+                <p className="text-gray-600">{user?.email || 'user@example.com'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Credit Limit Card */}
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm">Credit Limit</p>
+                <p className="text-2xl font-bold">1,714</p>
+                <p className="text-blue-100 text-xs">Daily credits refresh at 08:00 every day</p>
+              </div>
+              <CreditCard size={32} className="text-blue-200" />
+            </div>
+          </div>
+
+          {/* Medication Section */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Medication</h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => setCurrentPage('medications')}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Pill size={20} className="text-blue-600" />
+                  <span className="font-medium">My Medication</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Placeholder for scan history page
+                  alert('Scan History page coming soon!');
+                }}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <History size={20} className="text-green-600" />
+                  <span className="font-medium">Scan History</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+            </div>
+          </div>
+
+          {/* Information Section */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Information</h3>
+            <div className="space-y-3">
+              <button
+                onClick={handleRateApp}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Star size={20} className="text-yellow-500" />
+                  <span className="font-medium">Rate this App</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+              
+              <button
+                onClick={handleContactUs}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Mail size={20} className="text-blue-600" />
+                  <span className="font-medium">Contact Us</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Add the missing file input element before the main render logic
   return (
     <div className="App">
@@ -693,6 +833,8 @@ const MediScanApp = () => {
             return <AuthPage />;
           case 'medications':
             return <MedicationsPage />;
+          case 'profile':
+            return <ProfilePage />;
           default:
             return <CameraPage />;
         }
