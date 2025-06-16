@@ -129,10 +129,49 @@ const MediScanApp = () => {
   };
 
   // Save scan to history
-  const saveScanToHistory = async (medicineInfo, imageUrl) => {
+  const saveScanToHistory = async (medicineInfo, imageData) => {
     if (!user) return;
 
     try {
+      let imageUrl = null;
+
+      // Upload image to Supabase Storage if imageData is provided
+      if (imageData) {
+        // Convert base64 to blob
+        const base64Data = imageData.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+        // Create unique filename with user ID and timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `${user.id}/${timestamp}-scan.jpg`;
+
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('scan-images')
+          .upload(fileName, blob, {
+            contentType: 'image/jpeg',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          throw uploadError;
+        }
+
+        // Get public URL for the uploaded image
+        const { data: urlData } = supabase.storage
+          .from('scan-images')
+          .getPublicUrl(fileName);
+
+        imageUrl = urlData.publicUrl;
+      }
+
       const scanRecord = {
         user_id: user.id,
         medicine_name: medicineInfo.name,
@@ -150,25 +189,60 @@ const MediScanApp = () => {
       
       // Reload scan history
       loadScanHistory();
+      
+      console.log('Scan saved successfully with image URL:', imageUrl);
     } catch (error) {
       console.error('Error saving scan to history:', error);
+      alert('Failed to save scan to history. Please try again.');
     }
   };
 
   // Delete scan from history
   const deleteScanFromHistory = async (scanId) => {
     try {
-      const { error } = await supabase
+      // First, get the scan record to find the image URL
+      const { data: scanData, error: fetchError } = await supabase
+        .from('scan_history')
+        .select('image_url')
+        .eq('id', scanId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Delete the scan record from database
+      const { error: deleteError } = await supabase
         .from('scan_history')
         .delete()
         .eq('id', scanId);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+
+      // Delete the associated image from storage if it exists
+      if (scanData?.image_url) {
+        try {
+          // Extract filename from the public URL
+          const url = new URL(scanData.image_url);
+          const pathParts = url.pathname.split('/');
+          const fileName = pathParts.slice(-2).join('/'); // Get user_id/filename.jpg
+
+          const { error: storageError } = await supabase.storage
+            .from('scan-images')
+            .remove([fileName]);
+
+          if (storageError) {
+            console.error('Error deleting image from storage:', storageError);
+            // Don't throw here - scan record is already deleted
+          }
+        } catch (urlError) {
+          console.error('Error parsing image URL for deletion:', urlError);
+        }
+      }
       
       // Reload scan history
       loadScanHistory();
     } catch (error) {
       console.error('Error deleting scan:', error);
+      alert('Failed to delete scan. Please try again.');
     }
   };
 

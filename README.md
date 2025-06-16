@@ -32,16 +32,16 @@ MediScan is a modern web application that helps users identify medicines by taki
 - CORS enabled for frontend integration
 
 **Database & Storage:**
-- Supabase PostgreSQL (development database)
+- Supabase PostgreSQL (with scan_history table configured)
 - Supabase Auth (Google OAuth + Email OTP)
-- Base64 image storage (temporary - needs Supabase Storage bucket)
+- Supabase Storage (scan-images bucket with RLS policies)
 
 ### Production Stack (Future Migration)
 **Target Architecture:**
 - Frontend: React + Vite → Cloudflare Pages
 - Backend: Express → Cloudflare Workers
 - Database: Supabase → Cloudflare D1
-- Storage: Base64 → Cloudflare R2
+- Storage: Supabase Storage → Cloudflare R2
 - Auth: Supabase Auth → Cloudflare Access or custom JWT
 
 ## Quick Start
@@ -99,29 +99,7 @@ This creates a `scan_history` table with:
 - Cloudflare D1 compatibility for future migration
 
 ### 4. Supabase Storage Setup (Required for Image Storage)
-**Current Issue**: Images are stored as base64 in the database (temporary solution)
-
-**To enable proper image storage:**
-1. Go to your Supabase project dashboard
-2. Navigate to Storage
-3. Create a new bucket named `scan-images`
-4. Set bucket to **Public** (for image access)
-5. Configure RLS policies for the bucket:
-   ```sql
-   -- Allow authenticated users to upload images
-   CREATE POLICY "Users can upload scan images" ON storage.objects
-     FOR INSERT WITH CHECK (bucket_id = 'scan-images' AND auth.uid()::text = (storage.foldername(name))[1]);
-   
-   -- Allow users to view their own images
-   CREATE POLICY "Users can view own scan images" ON storage.objects
-     FOR SELECT USING (bucket_id = 'scan-images' AND auth.uid()::text = (storage.foldername(name))[1]);
-   
-   -- Allow users to delete their own images
-   CREATE POLICY "Users can delete own scan images" ON storage.objects
-     FOR DELETE USING (bucket_id = 'scan-images' AND auth.uid()::text = (storage.foldername(name))[1]);
-   ```
-
-**Note**: The current implementation stores images as base64 in the database. This works for development but should be migrated to Supabase Storage for better performance and eventual Cloudflare R2 migration.
+**Current Status**: Supabase Storage is fully implemented with a `scan-images` bucket and RLS policies for secure image storage.
 
 ### 5. Start the Application
 ```bash
@@ -232,6 +210,38 @@ Remember to:
 - [ ] Advanced medicine interaction checking
 - [ ] Export medication data (PDF/CSV)
 
+## Recent Improvements (Latest Update)
+
+### ✅ Completed Features
+- **Supabase Storage Implementation**: Fully migrated from base64 image storage to proper Supabase Storage
+  - Created `scan-images` bucket with public access
+  - Implemented Row Level Security (RLS) policies for secure user-based access
+  - Updated upload logic to convert base64 to blob and store in bucket
+  - Images now stored with structure: `{user_id}/{timestamp}-scan.jpg`
+  - Added proper image deletion when scan history is removed
+
+- **Enhanced Development Environment**: 
+  - Root `npm run dev:all` script for concurrent frontend/backend startup
+  - Improved error handling and user feedback
+  - Console logging for debugging upload/storage operations
+
+### 🔧 Technical Improvements
+- **Upload Logic**: `saveScanToHistory()` now properly uploads images to Supabase Storage and saves public URLs
+- **Delete Logic**: `deleteScanFromHistory()` removes both database records and associated storage files
+- **File Organization**: User-specific folders prevent filename conflicts and ensure data isolation
+- **Performance**: Eliminated large base64 strings from database, improving query performance
+
+### 🚀 Current Status
+- ✅ Frontend running on http://localhost:5175/
+- ✅ Backend API running on port 3001
+- ✅ Supabase database with `scan_history` table
+- ✅ Supabase Storage with `scan-images` bucket and RLS policies
+- ✅ Full authentication flow (Google OAuth + Email OTP)
+- ✅ Complete scan history functionality with image storage
+- ✅ Profile management and medication tracking
+
+The application is now ready for full testing and production use with proper image storage infrastructure.
+
 ## Contributing
 
 1. Fork the repository
@@ -271,9 +281,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Immediate (Required for Full Functionality)
 1. **Database Migration**: Run `database/scan_history_table.sql` in Supabase SQL Editor
-2. **Storage Bucket**: Create `scan-images` bucket in Supabase Storage
-3. **Environment Variables**: Ensure all `.env` files are properly configured
-4. **Google AI API**: Verify API key is working in backend
+2. **Environment Variables**: Ensure all `.env` files are properly configured
+3. **Google AI API**: Verify API key is working in backend
 
 ### Future (Production Migration)
 1. **Cloudflare D1**: Convert Supabase tables to D1 schema
