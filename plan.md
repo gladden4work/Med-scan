@@ -29,75 +29,38 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - Potential for ads
 
 ## Requirements & Infrastructure
-| Area                 | Decision                                              |
+
+### Development Stack (Current)
+| Area                 | Current Implementation                                |
+| -------------------- | ----------------------------------------------------- |
+| **Frontend**         | React (Vite)                                          |
+| **Hosting**          | Local development (npm run dev:all)                  |
+| **Backend API**      | Express.js + Node.js                                 |
+| **Auth**             | Supabase Auth (email/social login, JWT support)      |
+| **Database**         | Supabase PostgreSQL                                   |
+| **Image Storage**    | Base64 in database (temporary)                       |
+| **State Management** | React hooks                                           |
+
+### Production Stack (Target - Migration Required)
+| Area                 | Target Implementation                                 |
 | -------------------- | ----------------------------------------------------- |
 | **Frontend**         | React (Vite)                                          |
 | **Hosting**          | Cloudflare Pages + Workers                            |
 | **Serverless API**   | Cloudflare Workers (TypeScript)                       |
-| **Auth**             | Supabase Auth (email/social login, JWT support)       |
-| **Budget**           | < USD 15/month                                        |
-| **Image processing** | Python (phash, compiled to WASM for web)              |
-| **Object storage**   | Cloudflare R2                                         |
+| **Auth**             | Supabase Auth → Cloudflare Access or custom JWT      |
 | **Database**         | Cloudflare D1                                         |
+| **Image Storage**    | Cloudflare R2                                         |
+| **Budget**           | < USD 15/month                                        |
 | **React State**      | Tanstack Query                                        |
 | **Share links**      | Tokenized public URL, read-only DB access             |
-| **Scan limits**      | Supabase user ID                                      |
+| **Scan limits**      | User ID-based tracking                               |
 | **Error logging**    | Cloudflare Logpush                                    |
 
----
-
-## Current Status & Issues (June 2025)
-
-**Project Status**: V2 conversion successful.
-
-### Identified Issues:
-1. **Frontend is hybrid v1/v2**: Current `mediscan-app/src/App.jsx` still shows "Enter Google API Key" field (v1 behavior)
-2. **No backend integration**: Frontend makes direct Google AI calls instead of calling backend `/analyze` endpoint
-3. **Legacy code mess**: `mediscan-app/legacy-app/` folder contains duplicate old code
-4. **Port conflicts**: Backend cannot start on port 4000 (already in use)
-5. **Missing unified startup script**: `dev:all` script is missing/broken
-
-### Architecture Goal:
-- **Frontend (v2)**: No API key input, calls backend `/analyze`, proper Supabase auth
-- **Backend (v2)**: Secure API key handling, `/analyze` endpoint, CORS configured
-- **Clean structure**: No legacy folders, unified startup process
-
-## V2 Conversion & Cleanup Plan
-
-### Phase 1: Update Documentation & Plan
-- [x] Update `plan.md` with current state and v2 conversion plan
-- [ ] Document file structure and responsibilities
-
-### Phase 2: Clean Legacy Code
-- [x] Remove entire `mediscan-app/legacy-app/` folder
-- [x] Remove any duplicate/conflicting files
-- [x] Verify clean project structure
-
-### Phase 3: Convert Frontend to V2
-- [x] Remove "Enter Google API Key" input field from UI
-- [x] Replace direct Google AI calls with backend API calls
-- [x] Update `analyzeMedicine` function to call `http://localhost:3001/analyze`
-- [x] Add proper error handling for backend communication
-- [x] Test Supabase authentication integration
-
-### Phase 4: Fix Backend & Port Configuration
-- [x] Resolve port 4000 conflict (kill process or change port)
-- [x] Update backend to use port 3001 instead of 4000
-- [x] Add environment variable for backend URL in frontend
-- [x] Test backend `/analyze` endpoint
-
-### Phase 5: Unified Development Setup
-- [x] Add `dev:all` script to run both frontend (port 5173) and backend (port 3001)
-- [x] Create root `package.json` with concurrently for unified startup
-- [x] Update README with correct startup instructions
-- [x] Test full end-to-end workflow
-
-### Phase 6: Validation & Testing
-- [x] Verify no API key input field visible in UI
-- [x] Test image upload → backend analysis → results display
-- [x] Verify Supabase auth works properly
-- [x] Test "My Medications" functionality
-- [x] Run unified `dev:all` script successfully
+### Migration Strategy
+1. **Phase 1 (Current)**: Supabase for rapid development and feature completion
+2. **Phase 2 (Storage)**: Add Supabase Storage bucket for images (replace base64)
+3. **Phase 3 (Migration)**: Migrate to Cloudflare D1/R2 with Workers backend
+4. **Phase 4 (Mobile)**: Convert to React Native with Cloudflare backend
 
 ## Recent Updates (2025-01-16)
 
@@ -193,28 +156,28 @@ CREATE TABLE scan_history (
 - **Image Storage**: Currently uses base64, can be migrated to Cloudflare R2 storage
 - **State Management**: React hooks pattern works identically in React Native
 
-## File Roles & Structure
+## Pending Development Tasks
 
-### Core Files:
-- `plan.md`: This document, project planning and status tracking
-- `README.md`: User setup guide and project overview
-- `backend/server.js`: Express server with `/analyze` endpoint, secure API key handling
-- `backend/.env`: Contains `GOOGLE_API_KEY` (never commit to repo)
-- `backend/package.json`: Backend dependencies and start script
-- `mediscan-app/src/App.jsx`: Main React component (v2: no API key input, calls backend)
-- `mediscan-app/src/supabaseClient.js`: Supabase configuration
-- `mediscan-app/src/AuthContext.jsx`: Authentication context provider
-- `mediscan-app/.env`: Frontend environment variables (`VITE_SUPABASE_URL`, etc.)
-- `mediscan-app/package.json`: Frontend dependencies and scripts, including the `dev:all` script to run both servers.
+### Immediate (Supabase Development)
+- [ ] **Supabase Storage Setup**: Create storage bucket for scan images
+- [ ] **Image Upload Logic**: Replace base64 with proper image uploads to Supabase Storage
+- [ ] **Database Migration**: Run scan_history table creation in Supabase
+- [ ] **Authentication Flow**: Ensure proper user session management
+- [ ] **Error Handling**: Improve error states and user feedback
 
-### Folders to Remove:
-- `mediscan-app/legacy-app/`: Old v1 code (duplicate, causes confusion)
+### Future Migration (Cloudflare Production)
+- [ ] **D1 Schema Design**: Convert Supabase tables to Cloudflare D1 schema
+- [ ] **Workers API**: Rewrite Express backend as Cloudflare Workers
+- [ ] **R2 Storage**: Migrate image storage from Supabase to Cloudflare R2
+- [ ] **Authentication**: Replace Supabase Auth with Cloudflare Access or JWT
+- [ ] **Frontend Updates**: Update API calls to use Workers endpoints
+- [ ] **Deployment**: Set up Cloudflare Pages deployment pipeline
 
-## Lessons Learned During V2 Conversion
-- **Hybrid Code Issues**: Having both v1 and v2 code mixed leads to confusion and bugs
-- **Port Management**: Always check for port conflicts before starting services
-- **API Integration**: Frontend should never directly call external APIs when backend proxy exists
-- **Legacy Cleanup**: Remove old code immediately to prevent serving wrong version
+### Mobile Preparation
+- [ ] **Component Architecture**: Ensure React components are React Native compatible
+- [ ] **API Abstraction**: Create API layer that works with both web and mobile
+- [ ] **State Management**: Implement proper state management for mobile
+- [ ] **Image Handling**: Mobile camera integration and image processing
 
 ## Current Goal
 Replace mock image capture with real camera/file input handling for better UX and mobile support.

@@ -19,6 +19,7 @@ MediScan is a modern web application that helps users identify medicines by taki
 
 ## Tech Stack
 
+### Development Stack (Current)
 **Frontend:**
 - React + Vite
 - Tailwind CSS for styling
@@ -30,9 +31,18 @@ MediScan is a modern web application that helps users identify medicines by taki
 - Google Generative AI API
 - CORS enabled for frontend integration
 
-**Authentication:**
+**Database & Storage:**
+- Supabase PostgreSQL (development database)
 - Supabase Auth (Google OAuth + Email OTP)
-- No password-based authentication
+- Base64 image storage (temporary - needs Supabase Storage bucket)
+
+### Production Stack (Future Migration)
+**Target Architecture:**
+- Frontend: React + Vite → Cloudflare Pages
+- Backend: Express → Cloudflare Workers
+- Database: Supabase → Cloudflare D1
+- Storage: Base64 → Cloudflare R2
+- Auth: Supabase Auth → Cloudflare Access or custom JWT
 
 ## Quick Start
 
@@ -88,7 +98,32 @@ This creates a `scan_history` table with:
 - Optimized indexes for performance
 - Cloudflare D1 compatibility for future migration
 
-### 4. Start the Application
+### 4. Supabase Storage Setup (Required for Image Storage)
+**Current Issue**: Images are stored as base64 in the database (temporary solution)
+
+**To enable proper image storage:**
+1. Go to your Supabase project dashboard
+2. Navigate to Storage
+3. Create a new bucket named `scan-images`
+4. Set bucket to **Public** (for image access)
+5. Configure RLS policies for the bucket:
+   ```sql
+   -- Allow authenticated users to upload images
+   CREATE POLICY "Users can upload scan images" ON storage.objects
+     FOR INSERT WITH CHECK (bucket_id = 'scan-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+   
+   -- Allow users to view their own images
+   CREATE POLICY "Users can view own scan images" ON storage.objects
+     FOR SELECT USING (bucket_id = 'scan-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+   
+   -- Allow users to delete their own images
+   CREATE POLICY "Users can delete own scan images" ON storage.objects
+     FOR DELETE USING (bucket_id = 'scan-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+   ```
+
+**Note**: The current implementation stores images as base64 in the database. This works for development but should be migrated to Supabase Storage for better performance and eventual Cloudflare R2 migration.
+
+### 5. Start the Application
 ```bash
 npm run dev:all
 ```
@@ -97,7 +132,7 @@ This unified command starts both:
 - **Frontend:** React app on `http://localhost:5173` (or next available port)
 - **Backend:** Express server on `http://localhost:3001`
 
-### 5. Open & Use
+### 6. Open & Use
 Navigate to the frontend URL shown in your terminal and start identifying medicines!
 
 ## Authentication
@@ -212,3 +247,36 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ using React, Node.js, and Google AI**
+
+## Architecture Notes
+
+### Development vs Production
+- **Current**: Using Supabase for rapid development and feature completion
+- **Target**: Will migrate to Cloudflare D1 (database) + R2 (storage) + Workers (backend)
+- **Migration**: All current code is designed to be easily portable to Cloudflare stack
+
+### Why Supabase for Development?
+1. **Rapid Prototyping**: Instant database setup with authentication
+2. **Real-time Features**: Built-in RLS policies and real-time subscriptions
+3. **Development Speed**: Faster to implement profile page and scan history
+4. **Migration-Friendly**: Standard SQL and REST APIs easily portable to Cloudflare
+
+### Migration Readiness
+- Database schema uses standard SQL (D1 compatible)
+- API calls use standard fetch() (Workers compatible)
+- React components work identically with different backends
+- Authentication can be replaced with Cloudflare Access
+
+## Pending Setup Tasks
+
+### Immediate (Required for Full Functionality)
+1. **Database Migration**: Run `database/scan_history_table.sql` in Supabase SQL Editor
+2. **Storage Bucket**: Create `scan-images` bucket in Supabase Storage
+3. **Environment Variables**: Ensure all `.env` files are properly configured
+4. **Google AI API**: Verify API key is working in backend
+
+### Future (Production Migration)
+1. **Cloudflare D1**: Convert Supabase tables to D1 schema
+2. **Cloudflare R2**: Migrate image storage from Supabase to R2
+3. **Cloudflare Workers**: Rewrite Express backend as Workers
+4. **Cloudflare Pages**: Deploy frontend to Pages
