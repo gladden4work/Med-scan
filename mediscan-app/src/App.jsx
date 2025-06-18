@@ -10,18 +10,57 @@ import {
 } from 'lucide-react';
 
 const MediScanApp = () => {
+  const { user, loading } = useAuth(); // Get user from AuthContext
   const [currentPage, setCurrentPage] = useState('camera');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState(null);
   const [medications, setMedications] = useState([]);
   const [scanHistory, setScanHistory] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [medicineData, setMedicineData] = useState(null);
   const fileInputRef = useRef(null);
+  const [previousPage, setPreviousPage] = useState(null); // Track previous page for navigation
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+  // Navigate to a page with tracking previous page
+  const navigateTo = (page) => {
+    setPreviousPage(currentPage);
+    setCurrentPage(page);
+    
+    // Reset captured image when navigating back to camera from a non-preview page
+    if (page === 'camera' && currentPage !== 'preview') {
+      setCapturedImage(null);
+    }
+  };
+
+  // Check authentication for protected pages
+  const checkAuthAndNavigate = (page) => {
+    // If trying to access a protected page without being logged in
+    if (!user && (page === 'profile' || page === 'scan-history' || page === 'medications')) {
+      navigateTo('auth');
+    } else {
+      navigateTo(page);
+    }
+  };
+
+  // Check if trying to access protected pages while not logged in
+  useEffect(() => {
+    if (!loading && !user && 
+        (currentPage === 'profile' || 
+         currentPage === 'scan-history' || 
+         currentPage === 'medications')) {
+      navigateTo('auth');
+    }
+  }, [user, loading, currentPage]);
+
+  // Load scan history when user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadScanHistory();
+    }
+  }, [user]);
 
   // Mock medicine data
   const mockMedicineData = {
@@ -126,6 +165,20 @@ const MediScanApp = () => {
     } catch (error) {
       console.error('Error loading scan history:', error);
     }
+  };
+
+  // View details of a saved scan
+  const viewScanDetails = (scan) => {
+    // Set the medicine data from the saved scan
+    setMedicineData(scan.medicine_data);
+    
+    // Set the image URL or base64 data
+    if (scan.image_url) {
+      setCapturedImage(scan.image_url);
+    }
+    
+    // Navigate to the results page
+    navigateTo('results');
   };
 
   // Save scan to history
@@ -246,11 +299,6 @@ const MediScanApp = () => {
     }
   };
 
-  // Load scan history when user changes
-  useEffect(() => {
-    loadScanHistory();
-  }, [user]);
-
   // Camera Page Component
   const CameraPage = () => (
     <div className="min-h-screen bg-gray-50">
@@ -258,7 +306,7 @@ const MediScanApp = () => {
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">MediScan</h1>
         <button
-          onClick={() => setCurrentPage('profile')}
+          onClick={() => checkAuthAndNavigate('profile')}
           className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
         >
           <User className="w-5 h-5 text-gray-600" />
@@ -371,7 +419,7 @@ const MediScanApp = () => {
           <button
             onClick={() => {
               setCapturedImage(null);
-              setCurrentPage('camera');
+              navigateTo('camera');
             }}
             className="w-full bg-white/20 hover:bg-white/30 text-white font-semibold py-4 px-6 rounded-2xl flex items-center justify-center space-x-2 transition-colors"
           >
@@ -441,14 +489,14 @@ const MediScanApp = () => {
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => setCurrentPage('camera')}
+            onClick={() => navigateTo('camera')}
             className="flex items-center space-x-2 text-gray-600"
           >
             <ChevronLeft className="w-5 h-5" />
             <span>Back</span>
           </button>
           <button
-            onClick={() => setCurrentPage('profile')}
+            onClick={() => checkAuthAndNavigate('profile')}
             className="p-2 rounded-full bg-gray-100"
           >
             <User className="w-5 h-5 text-gray-600" />
@@ -535,13 +583,6 @@ const MediScanApp = () => {
       <span>Add to My Medications</span>
     </button>
     <button
-      onClick={() => saveScanToHistory(medicineData, capturedImage)}
-      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors"
-    >
-      <History className="w-5 h-5" />
-      <span>Save to Scan History</span>
-    </button>
-    <button
       onClick={generateShareLink}
       className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors"
     >
@@ -563,6 +604,22 @@ const MediScanApp = () => {
     const [submitting, setSubmitting] = useState(false);
     const [otpSent, setOtpSent] = useState(false);
     const [message, setMessage] = useState('');
+
+    // Redirect if already authenticated
+    useEffect(() => {
+      if (user && !loading) {
+        // If user came from a specific page before auth, go back there
+        if (previousPage && 
+            (previousPage === 'profile' || 
+             previousPage === 'scan-history' || 
+             previousPage === 'medications')) {
+          navigateTo(previousPage);
+        } else {
+          // Otherwise go to camera
+          navigateTo('camera');
+        }
+      }
+    }, [user, loading, previousPage]);
 
     // Handle Google OAuth Sign In
     const handleGoogleSignIn = async () => {
@@ -845,12 +902,8 @@ const MediScanApp = () => {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
         
-        // Reset app state
-        setUser(null);
-        setIsLoggedIn(false);
-        setMedications([]);
-        setScanHistory([]);
-        setCurrentPage('camera');
+        // Reset app state and redirect to auth page
+        setCurrentPage('auth');
       } catch (error) {
         console.error('Error signing out:', error);
         alert('Error signing out. Please try again.');
@@ -1003,7 +1056,7 @@ const MediScanApp = () => {
         {/* Header */}
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => setCurrentPage('profile')}
+            onClick={() => navigateTo('profile')}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
           >
             <ChevronLeft size={24} />
@@ -1027,34 +1080,43 @@ const MediScanApp = () => {
                   <div className="space-y-3">
                     {scans.map((scan) => (
                       <div key={scan.id} className="bg-white rounded-lg p-4 shadow-sm flex items-center space-x-4">
-                        {/* Medicine Image */}
-                        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
-                          {scan.image_url ? (
-                            <img 
-                              src={scan.image_url} 
-                              alt={scan.medicine_name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <Pill size={24} className="text-gray-400" />
-                          )}
-                        </div>
-                        
-                        {/* Medicine Info */}
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{scan.medicine_name}</h3>
-                          <p className="text-sm text-gray-600">{scan.manufacturer}</p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(scan.created_at).toLocaleTimeString('en-US', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
+                        {/* Clickable area for viewing scan details */}
+                        <div 
+                          className="flex-1 flex items-center space-x-4 cursor-pointer"
+                          onClick={() => viewScanDetails(scan)}
+                        >
+                          {/* Medicine Image */}
+                          <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                            {scan.image_url ? (
+                              <img 
+                                src={scan.image_url} 
+                                alt={scan.medicine_name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Pill size={24} className="text-gray-400" />
+                            )}
+                          </div>
+                          
+                          {/* Medicine Info */}
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{scan.medicine_name}</h3>
+                            <p className="text-sm text-gray-600">{scan.manufacturer}</p>
+                            <p className="text-xs text-gray-400">
+                              {new Date(scan.created_at).toLocaleTimeString('en-US', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
                         </div>
                         
                         {/* Delete Button */}
                         <button
-                          onClick={() => handleDeleteScan(scan.id)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering the parent click
+                            handleDeleteScan(scan.id);
+                          }}
                           className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 size={16} />
@@ -1082,26 +1144,37 @@ const MediScanApp = () => {
         className="hidden"
       />
       
-      {(() => {
-        switch (currentPage) {
-          case 'camera':
-            return <CameraPage />;
-          case 'preview':
-            return <PreviewPage />;
-          case 'results':
-            return <ResultsPage />;
-          case 'auth':
-            return <AuthPage />;
-          case 'medications':
-            return <MedicationsPage />;
-          case 'profile':
-            return <ProfilePage />;
-          case 'scan-history':
-            return <ScanHistoryPage />;
-          default:
-            return <CameraPage />;
-        }
-      })()}
+      {loading ? (
+        // Show loading state while checking authentication
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        // Show the requested page
+        (() => {
+          switch (currentPage) {
+            case 'camera':
+              return <CameraPage />;
+            case 'preview':
+              return <PreviewPage />;
+            case 'results':
+              return <ResultsPage />;
+            case 'auth':
+              return <AuthPage />;
+            case 'medications':
+              return <MedicationsPage />;
+            case 'profile':
+              return <ProfilePage />;
+            case 'scan-history':
+              return <ScanHistoryPage />;
+            default:
+              return <CameraPage />;
+          }
+        })()
+      )}
     </div>
   );
 };

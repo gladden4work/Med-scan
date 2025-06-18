@@ -210,37 +210,43 @@ Remember to:
 - [ ] Advanced medicine interaction checking
 - [ ] Export medication data (PDF/CSV)
 
-## Recent Improvements (Latest Update)
+## Recent Improvements (Latest Update - June 2025)
 
-### ✅ Completed Features
-- **Supabase Storage Implementation**: Fully migrated from base64 image storage to proper Supabase Storage
-  - Created `scan-images` bucket with public access
-  - Implemented Row Level Security (RLS) policies for secure user-based access
-  - Updated upload logic to convert base64 to blob and store in bucket
-  - Images now stored with structure: `{user_id}/{timestamp}-scan.jpg`
-  - Added proper image deletion when scan history is removed
+### ✅ Improved User Experience
+- **Enhanced Authentication Flow**: Main scanning functionality now accessible without login
+  - Protected features (Profile, Scan History, My Medications) require login only when accessed
+  - Improved login/signup experience with conditional authentication prompts
+  - Better first-time user experience with direct access to core functionality
 
-- **Enhanced Development Environment**: 
-  - Root `npm run dev:all` script for concurrent frontend/backend startup
-  - Improved error handling and user feedback
-  - Console logging for debugging upload/storage operations
+- **Advanced Navigation System**: 
+  - Implemented proper page navigation with history tracking
+  - Improved back button behavior for consistent user experience
+  - Automatic state reset when returning to camera page from other sections
+
+- **Interactive Scan History**:
+  - Scan history items now clickable to view past scan details
+  - Users can easily review previous scans with full medicine information
+  - Removed redundant "Save to History" button (saves automatically)
+  - Better visual feedback with cursor indicators for interactive elements
 
 ### 🔧 Technical Improvements
-- **Upload Logic**: `saveScanToHistory()` now properly uploads images to Supabase Storage and saves public URLs
-- **Delete Logic**: `deleteScanFromHistory()` removes both database records and associated storage files
-- **File Organization**: User-specific folders prevent filename conflicts and ensure data isolation
-- **Performance**: Eliminated large base64 strings from database, improving query performance
+- **Navigation Architecture**: Added `navigateTo` and `checkAuthAndNavigate` functions for better state management
+- **History State Management**: Implemented tracking of previous page for improved navigation paths
+- **Protected Routes Logic**: Added conditional authentication checks for profile-related features
+- **Scan Details Retrieval**: New functionality to load and display previously saved scan details
+- **UI Responsiveness**: Enhanced clickable areas and interactive elements for better mobile experience
 
 ### 🚀 Current Status
 - ✅ Frontend running on http://localhost:5175/
 - ✅ Backend API running on port 3001
-- ✅ Supabase database with `scan_history` table
-- ✅ Supabase Storage with `scan-images` bucket and RLS policies
+- ✅ Non-authenticated users can access main scanning functionality
+- ✅ Protected features require authentication only when accessed
 - ✅ Full authentication flow (Google OAuth + Email OTP)
-- ✅ Complete scan history functionality with image storage
-- ✅ Profile management and medication tracking
+- ✅ Interactive scan history with clickable items
+- ✅ Improved navigation with proper state management
+- ✅ Profile management with secure sign-out
 
-The application is now ready for full testing and production use with proper image storage infrastructure.
+The application now provides a more intuitive user experience with improved navigation flows and interactive features.
 
 ## Contributing
 

@@ -29,7 +29,7 @@ app.post('/analyze', async (req, res) => {
     
     // Initialize Google AI
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-04-17' });
 
     const prompt = `You are an expert in pharmacology and medicine identification. Analyze the provided image of a medication.
 Return a JSON object with the following structure. Do not include any other text or markdown formatting.
