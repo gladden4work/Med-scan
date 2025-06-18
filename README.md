@@ -8,11 +8,18 @@ MediScan is a modern web application that helps users identify medicines by taki
 - **Passwordless Authentication:** Secure sign-in with Google OAuth or Email OTP (no passwords required)
 - **Medicine Details:** Comprehensive information including name, manufacturer, usage, dosage, and precautions
 - **Personal Medication Tracker:** Save and manage your medications list
+- **Scan History Management:** Automatic saving and organized viewing of all medicine scans with delete functionality
+- **User Profile Management:** Complete profile page with credit tracking, medication history, and app settings
+- **Secure Sign-Out:** Clean session termination with state reset
+- **Platform-Aware App Rating:** Automatically detects iOS/Android and redirects to appropriate app store
+- **Direct Contact Support:** Built-in email integration for user feedback and support
 - **Mobile-First Design:** Responsive, modern UI built with Tailwind CSS
 - **Fast & Secure:** Backend API proxy keeps your API keys safe
+- **Cloudflare-Ready Architecture:** Database and API design prepared for Cloudflare Workers migration
 
 ## Tech Stack
 
+### Development Stack (Current)
 **Frontend:**
 - React + Vite
 - Tailwind CSS for styling
@@ -24,9 +31,18 @@ MediScan is a modern web application that helps users identify medicines by taki
 - Google Generative AI API
 - CORS enabled for frontend integration
 
-**Authentication:**
+**Database & Storage:**
+- Supabase PostgreSQL (with scan_history table configured)
 - Supabase Auth (Google OAuth + Email OTP)
-- No password-based authentication
+- Supabase Storage (scan-images bucket with RLS policies)
+
+### Production Stack (Future Migration)
+**Target Architecture:**
+- Frontend: React + Vite → Cloudflare Pages
+- Backend: Express → Cloudflare Workers
+- Database: Supabase → Cloudflare D1
+- Storage: Supabase Storage → Cloudflare R2
+- Auth: Supabase Auth → Cloudflare Access or custom JWT
 
 ## Quick Start
 
@@ -49,28 +65,43 @@ Copy the example environment files and add your credentials:
 ```bash
 # Backend environment
 cp backend/.env.example backend/.env
-# Add your Google API key to backend/.env
 
 # Frontend environment  
 cp mediscan-app/.env.example mediscan-app/.env
-# Add your Supabase credentials to mediscan-app/.env
 ```
 
-**Required Environment Variables:**
-
-`backend/.env`:
+**Backend `.env` file:**
 ```env
-GOOGLE_API_KEY=your_google_api_key_here
+GOOGLE_AI_API_KEY=your_google_ai_api_key_here
+PORT=3001
 ```
 
-`mediscan-app/.env`:
+**Frontend `.env` file:**
 ```env
 VITE_SUPABASE_URL=your_supabase_url_here
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 VITE_BACKEND_URL=http://localhost:3001
 ```
 
-### 3. Start the Application
+### 3. Database Setup (Supabase)
+Run the SQL migration to create the scan history table:
+
+1. Go to your Supabase project dashboard
+2. Navigate to SQL Editor
+3. Copy and paste the contents of `database/scan_history_table.sql`
+4. Execute the query to create the table and set up Row Level Security
+
+This creates a `scan_history` table with:
+- User-specific scan records with RLS policies
+- Automatic timestamps and UUID primary keys
+- JSONB storage for complete medicine analysis data
+- Optimized indexes for performance
+- Cloudflare D1 compatibility for future migration
+
+### 4. Supabase Storage Setup (Required for Image Storage)
+**Current Status**: Supabase Storage is fully implemented with a `scan-images` bucket and RLS policies for secure image storage.
+
+### 5. Start the Application
 ```bash
 npm run dev:all
 ```
@@ -79,7 +110,7 @@ This unified command starts both:
 - **Frontend:** React app on `http://localhost:5173` (or next available port)
 - **Backend:** Express server on `http://localhost:3001`
 
-### 4. Open & Use
+### 6. Open & Use
 Navigate to the frontend URL shown in your terminal and start identifying medicines!
 
 ## Authentication
@@ -90,6 +121,34 @@ MediScan v2 uses **passwordless authentication** for enhanced security:
 - **Email OTP:** Enter your email → receive 6-digit code → verify to sign in
 - **Auto Registration:** New users are automatically registered on first OTP verification
 - **No Passwords:** Enhanced security with no password storage or management
+
+## App Navigation
+
+### Main Pages
+- **Camera Page:** Primary scanning interface with photo capture/upload
+- **Preview Page:** Image confirmation before analysis
+- **Results Page:** Detailed medicine information display
+- **Profile Page:** User account management and app settings
+- **My Medications:** Personal medication tracking and history
+- **Authentication:** Passwordless login with Google OAuth or Email OTP
+
+### Profile Features
+- **User Information:** Display name and email with profile picture placeholder
+- **Credit System:** Shows daily credit limit (1,714) with refresh schedule
+- **Medication Management:** 
+  - Quick access to "My Medication" saved list
+  - "Scan History" for viewing and managing all previous scans
+- **Scan History Features:**
+  - Automatic saving of successful medicine analyses
+  - Date-grouped organization (e.g., "Friday, June 13")
+  - Individual scan records with medicine image, name, manufacturer, and timestamp
+  - Delete functionality with confirmation dialog
+  - Empty state guidance for new users
+- **App Information:**
+  - "Rate this App" - Platform-aware store redirection
+  - "Contact Us" - Direct email to gladden4work@gmail.com
+- **Account Management:**
+  - Secure sign-out with complete state reset
 
 ## Project Structure
 
@@ -151,6 +210,44 @@ Remember to:
 - [ ] Advanced medicine interaction checking
 - [ ] Export medication data (PDF/CSV)
 
+## Recent Improvements (Latest Update - June 2025)
+
+### ✅ Improved User Experience
+- **Enhanced Authentication Flow**: Main scanning functionality now accessible without login
+  - Protected features (Profile, Scan History, My Medications) require login only when accessed
+  - Improved login/signup experience with conditional authentication prompts
+  - Better first-time user experience with direct access to core functionality
+
+- **Advanced Navigation System**: 
+  - Implemented proper page navigation with history tracking
+  - Improved back button behavior for consistent user experience
+  - Automatic state reset when returning to camera page from other sections
+
+- **Interactive Scan History**:
+  - Scan history items now clickable to view past scan details
+  - Users can easily review previous scans with full medicine information
+  - Removed redundant "Save to History" button (saves automatically)
+  - Better visual feedback with cursor indicators for interactive elements
+
+### 🔧 Technical Improvements
+- **Navigation Architecture**: Added `navigateTo` and `checkAuthAndNavigate` functions for better state management
+- **History State Management**: Implemented tracking of previous page for improved navigation paths
+- **Protected Routes Logic**: Added conditional authentication checks for profile-related features
+- **Scan Details Retrieval**: New functionality to load and display previously saved scan details
+- **UI Responsiveness**: Enhanced clickable areas and interactive elements for better mobile experience
+
+### 🚀 Current Status
+- ✅ Frontend running on http://localhost:5175/
+- ✅ Backend API running on port 3001
+- ✅ Non-authenticated users can access main scanning functionality
+- ✅ Protected features require authentication only when accessed
+- ✅ Full authentication flow (Google OAuth + Email OTP)
+- ✅ Interactive scan history with clickable items
+- ✅ Improved navigation with proper state management
+- ✅ Profile management with secure sign-out
+
+The application now provides a more intuitive user experience with improved navigation flows and interactive features.
+
 ## Contributing
 
 1. Fork the repository
@@ -166,3 +263,35 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ using React, Node.js, and Google AI**
+
+## Architecture Notes
+
+### Development vs Production
+- **Current**: Using Supabase for rapid development and feature completion
+- **Target**: Will migrate to Cloudflare D1 (database) + R2 (storage) + Workers (backend)
+- **Migration**: All current code is designed to be easily portable to Cloudflare stack
+
+### Why Supabase for Development?
+1. **Rapid Prototyping**: Instant database setup with authentication
+2. **Real-time Features**: Built-in RLS policies and real-time subscriptions
+3. **Development Speed**: Faster to implement profile page and scan history
+4. **Migration-Friendly**: Standard SQL and REST APIs easily portable to Cloudflare
+
+### Migration Readiness
+- Database schema uses standard SQL (D1 compatible)
+- API calls use standard fetch() (Workers compatible)
+- React components work identically with different backends
+- Authentication can be replaced with Cloudflare Access
+
+## Pending Setup Tasks
+
+### Immediate (Required for Full Functionality)
+1. **Database Migration**: Run `database/scan_history_table.sql` in Supabase SQL Editor
+2. **Environment Variables**: Ensure all `.env` files are properly configured
+3. **Google AI API**: Verify API key is working in backend
+
+### Future (Production Migration)
+1. **Cloudflare D1**: Convert Supabase tables to D1 schema
+2. **Cloudflare R2**: Migrate image storage from Supabase to R2
+3. **Cloudflare Workers**: Rewrite Express backend as Workers
+4. **Cloudflare Pages**: Deploy frontend to Pages

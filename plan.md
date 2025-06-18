@@ -29,98 +29,100 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - Potential for ads
 
 ## Requirements & Infrastructure
-| Area                 | Decision                                              |
+
+### Development Stack (Current)
+| Area                 | Current Implementation                                |
+| -------------------- | ----------------------------------------------------- |
+| **Frontend**         | React (Vite)                                          |
+| **Hosting**          | Local development (npm run dev:all)                  |
+| **Backend API**      | Express.js + Node.js                                 |
+| **Auth**             | Supabase Auth (email/social login, JWT support)      |
+| **Database**         | Supabase PostgreSQL with scan_history table          |
+| **Image Storage**    | Supabase Storage (scan-images bucket with RLS)       |
+| **State Management** | React hooks                                           |
+
+### Production Stack (Target - Migration Required)
+| Area                 | Target Implementation                                 |
 | -------------------- | ----------------------------------------------------- |
 | **Frontend**         | React (Vite)                                          |
 | **Hosting**          | Cloudflare Pages + Workers                            |
 | **Serverless API**   | Cloudflare Workers (TypeScript)                       |
-| **Auth**             | Supabase Auth (email/social login, JWT support)       |
-| **Budget**           | < USD 15/month                                        |
-| **Image processing** | Python (phash, compiled to WASM for web)              |
-| **Object storage**   | Cloudflare R2                                         |
+| **Auth**             | Supabase Auth → Cloudflare Access or custom JWT      |
 | **Database**         | Cloudflare D1                                         |
+| **Image Storage**    | Cloudflare R2                                         |
+| **Budget**           | < USD 15/month                                        |
 | **React State**      | Tanstack Query                                        |
 | **Share links**      | Tokenized public URL, read-only DB access             |
-| **Scan limits**      | Supabase user ID                                      |
+| **Scan limits**      | User ID-based tracking                               |
 | **Error logging**    | Cloudflare Logpush                                    |
 
----
+### Migration Strategy
+1. **Phase 1 (Current)**: Supabase for rapid development and feature completion
+2. **Phase 2 (Storage)**: Add Supabase Storage bucket for images (replace base64)
+3. **Phase 3 (Migration)**: Migrate to Cloudflare D1/R2 with Workers backend
+4. **Phase 4 (Mobile)**: Convert to React Native with Cloudflare backend
 
-## Current Status & Issues (June 2025)
+## Recent Updates (2025-06-18)
 
-**Project Status**: V2 conversion successful.
+### Authentication Flow & Navigation Improvements - COMPLETED
+- **Authentication Flow**: Changed from automatic redirect to conditional authentication for protected pages only
+- **Main Page Access**: Non-authenticated users now have access to the main scanning functionality
+- **Protected Features**: Profile, Scan History, and My Medications now require login when accessed
+- **Navigation System**: Added proper page navigation with history tracking using `navigateTo` function
+- **Back Button Handling**: Improved navigation between pages with proper state reset when returning to camera
 
-### Identified Issues:
-1. **Frontend is hybrid v1/v2**: Current `mediscan-app/src/App.jsx` still shows "Enter Google API Key" field (v1 behavior)
-2. **No backend integration**: Frontend makes direct Google AI calls instead of calling backend `/analyze` endpoint
-3. **Legacy code mess**: `mediscan-app/legacy-app/` folder contains duplicate old code
-4. **Port conflicts**: Backend cannot start on port 4000 (already in use)
-5. **Missing unified startup script**: `dev:all` script is missing/broken
+### User Experience Enhancements - COMPLETED
+- **Clickable Scan History**: Made scan history items clickable to view past scan details
+- **Auto-Save Only**: Removed redundant "Save to History" button since scans are automatically saved
+- **Improved Profile Access**: User icon now checks auth status before navigating to profile
+- **Loading State**: Added loading spinner during authentication check
+- **Consistent Navigation**: All navigation now uses consistent function calls for better state management
 
-### Architecture Goal:
-- **Frontend (v2)**: No API key input, calls backend `/analyze`, proper Supabase auth
-- **Backend (v2)**: Secure API key handling, `/analyze` endpoint, CORS configured
-- **Clean structure**: No legacy folders, unified startup process
+### File Changes:
+- **Modified**: `src/App.jsx` - Updated authentication flow, navigation system and scan history viewing functionality
 
-## V2 Conversion & Cleanup Plan
+### Technical Implementation:
+- **Authentication Flow**: Replaced automatic redirect with `checkAuthAndNavigate` function that conditionally prompts for login
+- **Navigation Tracking**: Added `previousPage` state to remember navigation history
+- **Protected Routes**: Conditional checks for user authentication before accessing profile-related pages
+- **Scan Details Viewing**: New `viewScanDetails` function loads and displays past scan details
+- **UI Improvements**: Added cursor-pointer to scan items and improved clickable areas
 
-### Phase 1: Update Documentation & Plan
-- [x] Update `plan.md` with current state and v2 conversion plan
-- [ ] Document file structure and responsibilities
+## Lessons Learned
+- **Node.js Module Types**: When a Node.js backend server fails with module-related errors (`require is not defined` or `Cannot use import`), it's crucial to ensure consistency. The `backend/package.json` must include `"type": "module"` if the server code (`server.js`) uses ES Module `import` syntax. If it uses CommonJS `require()` syntax, `"type": "module"` must be removed. A mismatch between these two causes runtime errors.
+- **Supabase Auth Integration**: Adding authentication with Supabase is fast, but requires careful handling of environment variables. The frontend `.env` needs the correct `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (never commit these long-term). Sign-up flow requires email confirmation by default; users must check their inbox to activate their account. The React context/provider pattern is effective for global auth state. Always test both Google and email/password flows.
+- **Monorepo/Script Management**: After flattening the repo and removing the submodule, the root `package.json` (and the `dev:all` script) was lost. Now, frontend and backend must be started in separate terminals (`npm run dev` in `mediscan-app`, `npm run start` in `backend`). If you want a single command, you must recreate a root `package.json` with a script like `concurrently`.
+- **Duplicate Directories Pitfall**: Accidentally committing multiple copies of the frontend (`tmp-app/…`, `mediscan-app/legacy-app/`) can cause the dev server to serve the wrong version, leading to missing features. Always consolidate to a single source-of-truth folder and delete legacy copies immediately after migrations.
+- **Supabase Storage & RLS Setup**: Implementing proper image storage requires three components: (1) Creating a public storage bucket with appropriate naming (e.g., `scan-images`), (2) Setting up Row Level Security (RLS) policies for SELECT, INSERT, and DELETE operations using `auth.uid()` and folder-based access control, and (3) Refactoring upload logic to convert base64 to blob, upload to storage, and save public URLs instead of raw image data. The filename structure `{user_id}/{timestamp}-scan.jpg` ensures user isolation and prevents conflicts. Always handle both upload and deletion of images to prevent orphaned files in storage.
+- **Authentication Flow Design**: When designing authentication flows for apps with both public and protected features, it's better to conditionally prompt for authentication only when accessing protected features, rather than blocking the entire app. This provides a better user experience and allows users to explore the app's main functionality before committing to sign up.
+- **Navigation State Management**: Tracking navigation history and previous pages is crucial for implementing proper "back" behavior. A robust navigation system that includes state management for both the current and previous pages creates a more natural user experience.
+- **Port Conflicts During Development**: When running multiple servers locally, port conflicts can happen if a server is already running in the background. Use `EADDRINUSE` error messages to identify and resolve these conflicts by either killing the running process or configuring alternate ports.
 
-### Phase 2: Clean Legacy Code
-- [x] Remove entire `mediscan-app/legacy-app/` folder
-- [x] Remove any duplicate/conflicting files
-- [x] Verify clean project structure
+## Pending Development Tasks
 
-### Phase 3: Convert Frontend to V2
-- [x] Remove "Enter Google API Key" input field from UI
-- [x] Replace direct Google AI calls with backend API calls
-- [x] Update `analyzeMedicine` function to call `http://localhost:3001/analyze`
-- [x] Add proper error handling for backend communication
-- [x] Test Supabase authentication integration
+### Immediate (Supabase Development)
+- [x] **Supabase Storage Setup**: Create storage bucket for scan images
+- [x] **Image Upload Logic**: Replace base64 with proper image uploads to Supabase Storage
+- [x] **Database Migration**: Run scan_history table creation in Supabase
+- [x] **Authentication Flow**: Ensure proper user session management
+- [x] **Navigation Improvements**: Implement proper navigation and back button handling
+- [x] **Clickable Scan History**: Make scan history items clickable to view past scan details
+- [ ] **Error Handling**: Improve error states and user feedback
+- [ ] **End-to-End Testing**: Verify scan history saves and displays correctly
 
-### Phase 4: Fix Backend & Port Configuration
-- [x] Resolve port 4000 conflict (kill process or change port)
-- [x] Update backend to use port 3001 instead of 4000
-- [x] Add environment variable for backend URL in frontend
-- [x] Test backend `/analyze` endpoint
+### Future Migration (Cloudflare Production)
+- [ ] **D1 Schema Design**: Convert Supabase tables to Cloudflare D1 schema
+- [ ] **Workers API**: Rewrite Express backend as Cloudflare Workers
+- [ ] **R2 Storage**: Migrate image storage from Supabase to Cloudflare R2
+- [ ] **Authentication**: Replace Supabase Auth with Cloudflare Access or JWT
+- [ ] **Frontend Updates**: Update API calls to use Workers endpoints
+- [ ] **Deployment**: Set up Cloudflare Pages deployment pipeline
 
-### Phase 5: Unified Development Setup
-- [x] Add `dev:all` script to run both frontend (port 5173) and backend (port 3001)
-- [x] Create root `package.json` with concurrently for unified startup
-- [x] Update README with correct startup instructions
-- [x] Test full end-to-end workflow
-
-### Phase 6: Validation & Testing
-- [x] Verify no API key input field visible in UI
-- [x] Test image upload → backend analysis → results display
-- [x] Verify Supabase auth works properly
-- [x] Test "My Medications" functionality
-- [x] Run unified `dev:all` script successfully
-
-## File Roles & Structure
-
-### Core Files:
-- `plan.md`: This document, project planning and status tracking
-- `README.md`: User setup guide and project overview
-- `backend/server.js`: Express server with `/analyze` endpoint, secure API key handling
-- `backend/.env`: Contains `GOOGLE_API_KEY` (never commit to repo)
-- `backend/package.json`: Backend dependencies and start script
-- `mediscan-app/src/App.jsx`: Main React component (v2: no API key input, calls backend)
-- `mediscan-app/src/supabaseClient.js`: Supabase configuration
-- `mediscan-app/src/AuthContext.jsx`: Authentication context provider
-- `mediscan-app/.env`: Frontend environment variables (`VITE_SUPABASE_URL`, etc.)
-- `mediscan-app/package.json`: Frontend dependencies and dev script
-
-### Folders to Remove:
-- `mediscan-app/legacy-app/`: Old v1 code (duplicate, causes confusion)
-
-## Lessons Learned During V2 Conversion
-- **Hybrid Code Issues**: Having both v1 and v2 code mixed leads to confusion and bugs
-- **Port Management**: Always check for port conflicts before starting services
-- **API Integration**: Frontend should never directly call external APIs when backend proxy exists
-- **Legacy Cleanup**: Remove old code immediately to prevent serving wrong version
+### Mobile Preparation
+- [ ] **Component Architecture**: Ensure React components are React Native compatible
+- [ ] **API Abstraction**: Create API layer that works with both web and mobile
+- [ ] **State Management**: Implement proper state management for mobile
+- [ ] **Image Handling**: Mobile camera integration and image processing
 
 ## Current Goal
 Replace mock image capture with real camera/file input handling for better UX and mobile support.
@@ -139,6 +141,7 @@ Replace mock image capture with real camera/file input handling for better UX an
 - **Supabase Auth Integration**: Adding authentication with Supabase is fast, but requires careful handling of environment variables. The frontend `.env` needs the correct `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (never commit these long-term). Sign-up flow requires email confirmation by default; users must check their inbox to activate their account. The React context/provider pattern is effective for global auth state. Always test both Google and email/password flows.
 - **Monorepo/Script Management**: After flattening the repo and removing the submodule, the root `package.json` (and the `dev:all` script) was lost. Now, frontend and backend must be started in separate terminals (`npm run dev` in `mediscan-app`, `npm run start` in `backend`). If you want a single command, you must recreate a root `package.json` with a script like `concurrently`.
 - **Duplicate Directories Pitfall**: Accidentally committing multiple copies of the frontend (`tmp-app/…`, `mediscan-app/legacy-app/`) can cause the dev server to serve the wrong version, leading to missing features. Always consolidate to a single source-of-truth folder and delete legacy copies immediately after migrations.
+- **Supabase Storage & RLS Setup**: Implementing proper image storage requires three components: (1) Creating a public storage bucket with appropriate naming (e.g., `scan-images`), (2) Setting up Row Level Security (RLS) policies for SELECT, INSERT, and DELETE operations using `auth.uid()` and folder-based access control, and (3) Refactoring upload logic to convert base64 to blob, upload to storage, and save public URLs instead of raw image data. The filename structure `{user_id}/{timestamp}-scan.jpg` ensures user isolation and prevents conflicts. Always handle both upload and deletion of images to prevent orphaned files in storage.
 
 ## File Roles
 - `plan.md`: This document, outlining project goals and tasks.

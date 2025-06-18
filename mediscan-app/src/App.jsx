@@ -1,25 +1,66 @@
 // Paste this entire block into src/App.jsx
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from './supabaseClient.js';
 import { useAuth } from './AuthContext.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
-  Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock
+  Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
+  Star, Mail, Pill, History, CreditCard, LogOut, Trash2
 } from 'lucide-react';
 
 const MediScanApp = () => {
+  const { user, loading } = useAuth(); // Get user from AuthContext
   const [currentPage, setCurrentPage] = useState('camera');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState(null);
   const [medications, setMedications] = useState([]);
+  const [scanHistory, setScanHistory] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [medicineData, setMedicineData] = useState(null);
   const fileInputRef = useRef(null);
+  const [previousPage, setPreviousPage] = useState(null); // Track previous page for navigation
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+  // Navigate to a page with tracking previous page
+  const navigateTo = (page) => {
+    setPreviousPage(currentPage);
+    setCurrentPage(page);
+    
+    // Reset captured image when navigating back to camera from a non-preview page
+    if (page === 'camera' && currentPage !== 'preview') {
+      setCapturedImage(null);
+    }
+  };
+
+  // Check authentication for protected pages
+  const checkAuthAndNavigate = (page) => {
+    // If trying to access a protected page without being logged in
+    if (!user && (page === 'profile' || page === 'scan-history' || page === 'medications')) {
+      navigateTo('auth');
+    } else {
+      navigateTo(page);
+    }
+  };
+
+  // Check if trying to access protected pages while not logged in
+  useEffect(() => {
+    if (!loading && !user && 
+        (currentPage === 'profile' || 
+         currentPage === 'scan-history' || 
+         currentPage === 'medications')) {
+      navigateTo('auth');
+    }
+  }, [user, loading, currentPage]);
+
+  // Load scan history when user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadScanHistory();
+    }
+  }, [user]);
 
   // Mock medicine data
   const mockMedicineData = {
@@ -60,40 +101,36 @@ const MediScanApp = () => {
     }
   };
 
-  const analyzeMedicine = async (imageBase64) => {
+  const analyzeMedicine = async (imageData) => {
     setIsAnalyzing(true);
-    setMedicineData(null);
+    setCurrentPage('results');
 
     try {
-      // Send image to backend for analysis
       const response = await fetch(`${BACKEND_URL}/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          imageBase64: imageBase64,
-        }),
+        body: JSON.stringify({ imageBase64: imageData }),
       });
 
       if (!response.ok) {
-        throw new Error(`Backend error: ${response.status}`);
+        throw new Error('Failed to analyze medicine');
       }
 
-      const data = await response.json();
+      const result = await response.json();
+      setMedicineData(result);
       
-      if (data.error) {
-        throw new Error(data.error);
+      // Automatically save successful scans to history
+      if (result && user) {
+        await saveScanToHistory(result, imageData);
       }
-
-      setMedicineData(data);
     } catch (error) {
-      console.error('Medicine Analysis Error:', error);
-      // Fallback to mock data for demo purposes
-      setMedicineData(mockMedicineData); 
+      console.error('Error analyzing medicine:', error);
+      setMedicineData(null);
+    } finally {
+      setIsAnalyzing(false);
     }
-
-    setIsAnalyzing(false);
   };
 
   const handleAddToMedications = () => {
@@ -112,6 +149,156 @@ const MediScanApp = () => {
     alert('Share link copied to clipboard!');
   };
 
+  // Load scan history for the current user
+  const loadScanHistory = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('scan_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setScanHistory(data || []);
+    } catch (error) {
+      console.error('Error loading scan history:', error);
+    }
+  };
+
+  // View details of a saved scan
+  const viewScanDetails = (scan) => {
+    // Set the medicine data from the saved scan
+    setMedicineData(scan.medicine_data);
+    
+    // Set the image URL or base64 data
+    if (scan.image_url) {
+      setCapturedImage(scan.image_url);
+    }
+    
+    // Navigate to the results page
+    navigateTo('results');
+  };
+
+  // Save scan to history
+  const saveScanToHistory = async (medicineInfo, imageData) => {
+    if (!user) return;
+
+    try {
+      let imageUrl = null;
+
+      // Upload image to Supabase Storage if imageData is provided
+      if (imageData) {
+        // Convert base64 to blob
+        const base64Data = imageData.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+        // Create unique filename with user ID and timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `${user.id}/${timestamp}-scan.jpg`;
+
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('scan-images')
+          .upload(fileName, blob, {
+            contentType: 'image/jpeg',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          throw uploadError;
+        }
+
+        // Get public URL for the uploaded image
+        const { data: urlData } = supabase.storage
+          .from('scan-images')
+          .getPublicUrl(fileName);
+
+        imageUrl = urlData.publicUrl;
+      }
+
+      const scanRecord = {
+        user_id: user.id,
+        medicine_name: medicineInfo.name,
+        manufacturer: medicineInfo.manufacturer,
+        image_url: imageUrl,
+        medicine_data: medicineInfo,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('scan_history')
+        .insert([scanRecord]);
+
+      if (error) throw error;
+      
+      // Reload scan history
+      loadScanHistory();
+      
+      console.log('Scan saved successfully with image URL:', imageUrl);
+    } catch (error) {
+      console.error('Error saving scan to history:', error);
+      alert('Failed to save scan to history. Please try again.');
+    }
+  };
+
+  // Delete scan from history
+  const deleteScanFromHistory = async (scanId) => {
+    try {
+      // First, get the scan record to find the image URL
+      const { data: scanData, error: fetchError } = await supabase
+        .from('scan_history')
+        .select('image_url')
+        .eq('id', scanId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Delete the scan record from database
+      const { error: deleteError } = await supabase
+        .from('scan_history')
+        .delete()
+        .eq('id', scanId);
+
+      if (deleteError) throw deleteError;
+
+      // Delete the associated image from storage if it exists
+      if (scanData?.image_url) {
+        try {
+          // Extract filename from the public URL
+          const url = new URL(scanData.image_url);
+          const pathParts = url.pathname.split('/');
+          const fileName = pathParts.slice(-2).join('/'); // Get user_id/filename.jpg
+
+          const { error: storageError } = await supabase.storage
+            .from('scan-images')
+            .remove([fileName]);
+
+          if (storageError) {
+            console.error('Error deleting image from storage:', storageError);
+            // Don't throw here - scan record is already deleted
+          }
+        } catch (urlError) {
+          console.error('Error parsing image URL for deletion:', urlError);
+        }
+      }
+      
+      // Reload scan history
+      loadScanHistory();
+    } catch (error) {
+      console.error('Error deleting scan:', error);
+      alert('Failed to delete scan. Please try again.');
+    }
+  };
+
   // Camera Page Component
   const CameraPage = () => (
     <div className="min-h-screen bg-gray-50">
@@ -119,7 +306,7 @@ const MediScanApp = () => {
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">MediScan</h1>
         <button
-          onClick={() => setCurrentPage('auth')}
+          onClick={() => checkAuthAndNavigate('profile')}
           className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
         >
           <User className="w-5 h-5 text-gray-600" />
@@ -232,7 +419,7 @@ const MediScanApp = () => {
           <button
             onClick={() => {
               setCapturedImage(null);
-              setCurrentPage('camera');
+              navigateTo('camera');
             }}
             className="w-full bg-white/20 hover:bg-white/30 text-white font-semibold py-4 px-6 rounded-2xl flex items-center justify-center space-x-2 transition-colors"
           >
@@ -302,14 +489,14 @@ const MediScanApp = () => {
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => setCurrentPage('camera')}
+            onClick={() => navigateTo('camera')}
             className="flex items-center space-x-2 text-gray-600"
           >
             <ChevronLeft className="w-5 h-5" />
             <span>Back</span>
           </button>
           <button
-            onClick={() => setCurrentPage('auth')}
+            onClick={() => checkAuthAndNavigate('profile')}
             className="p-2 rounded-full bg-gray-100"
           >
             <User className="w-5 h-5 text-gray-600" />
@@ -417,6 +604,22 @@ const MediScanApp = () => {
     const [submitting, setSubmitting] = useState(false);
     const [otpSent, setOtpSent] = useState(false);
     const [message, setMessage] = useState('');
+
+    // Redirect if already authenticated
+    useEffect(() => {
+      if (user && !loading) {
+        // If user came from a specific page before auth, go back there
+        if (previousPage && 
+            (previousPage === 'profile' || 
+             previousPage === 'scan-history' || 
+             previousPage === 'medications')) {
+          navigateTo(previousPage);
+        } else {
+          // Otherwise go to camera
+          navigateTo('camera');
+        }
+      }
+    }, [user, loading, previousPage]);
 
     // Handle Google OAuth Sign In
     const handleGoogleSignIn = async () => {
@@ -670,6 +873,266 @@ const MediScanApp = () => {
     );
   };
 
+  // Profile Page Component
+  const ProfilePage = () => {
+    const { user } = useAuth();
+    
+    const handleRateApp = () => {
+      // Detect platform and redirect to appropriate store
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      
+      if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+        // iOS - redirect to App Store
+        window.open('https://apps.apple.com/app/your-app-id', '_blank');
+      } else if (/android/i.test(userAgent)) {
+        // Android - redirect to Google Play Store
+        window.open('https://play.google.com/store/apps/details?id=your.package.name', '_blank');
+      } else {
+        // Fallback for other platforms
+        alert('Please rate us on your device\'s app store!');
+      }
+    };
+
+    const handleContactUs = () => {
+      window.location.href = 'mailto:gladden4work@gmail.com?subject=Med-scan App Feedback';
+    };
+
+    const handleSignOut = async () => {
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        
+        // Reset app state and redirect to auth page
+        setCurrentPage('auth');
+      } catch (error) {
+        console.error('Error signing out:', error);
+        alert('Error signing out. Please try again.');
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentPage('camera')}
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-xl font-semibold">Profile</h1>
+          <div className="w-10"></div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* User Info Section */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <div className="flex items-center space-x-4">
+              {/* Profile Picture Placeholder */}
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                <User size={32} className="text-gray-400" />
+              </div>
+              
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                </h2>
+                <p className="text-gray-600">{user?.email || 'user@example.com'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Credit Limit Card */}
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm">Credit Limit</p>
+                <p className="text-2xl font-bold">1,714</p>
+                <p className="text-blue-100 text-xs">Daily credits refresh at 08:00 every day</p>
+              </div>
+              <CreditCard size={32} className="text-blue-200" />
+            </div>
+          </div>
+
+          {/* Medication Section */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Medication</h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => setCurrentPage('medications')}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Pill size={20} className="text-blue-600" />
+                  <span className="font-medium">My Medication</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+              
+              <button
+                onClick={() => setCurrentPage('scan-history')}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <History size={20} className="text-green-600" />
+                  <span className="font-medium">Scan History</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+            </div>
+          </div>
+
+          {/* Information Section */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Information</h3>
+            <div className="space-y-3">
+              <button
+                onClick={handleRateApp}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Star size={20} className="text-yellow-500" />
+                  <span className="font-medium">Rate this App</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+              
+              <button
+                onClick={handleContactUs}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Mail size={20} className="text-blue-600" />
+                  <span className="font-medium">Contact Us</span>
+                </div>
+                <ArrowRight size={16} className="text-gray-400" />
+              </button>
+            </div>
+          </div>
+
+          {/* Sign Out Button */}
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center justify-center space-x-3 p-4 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+            >
+              <LogOut size={20} />
+              <span className="font-medium">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Scan History Page Component
+  const ScanHistoryPage = () => {
+    const { user } = useAuth();
+
+    // Group scan history by date
+    const groupedHistory = scanHistory.reduce((groups, scan) => {
+      const date = new Date(scan.created_at).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      
+      if (!groups[date]) {
+        groups[date] = [];
+      }
+      groups[date].push(scan);
+      return groups;
+    }, {});
+
+    const handleDeleteScan = async (scanId) => {
+      if (window.confirm('Are you sure you want to delete this scan?')) {
+        await deleteScanFromHistory(scanId);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={() => navigateTo('profile')}
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-xl font-semibold">Scan History</h1>
+          <div className="w-10"></div>
+        </div>
+
+        <div className="p-6">
+          {Object.keys(groupedHistory).length === 0 ? (
+            <div className="text-center py-12">
+              <History size={48} className="mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500 mb-2">No scan history yet</p>
+              <p className="text-sm text-gray-400">Start scanning medicines to see your history here</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(groupedHistory).map(([date, scans]) => (
+                <div key={date}>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-3">{date}</h2>
+                  <div className="space-y-3">
+                    {scans.map((scan) => (
+                      <div key={scan.id} className="bg-white rounded-lg p-4 shadow-sm flex items-center space-x-4">
+                        {/* Clickable area for viewing scan details */}
+                        <div 
+                          className="flex-1 flex items-center space-x-4 cursor-pointer"
+                          onClick={() => viewScanDetails(scan)}
+                        >
+                          {/* Medicine Image */}
+                          <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                            {scan.image_url ? (
+                              <img 
+                                src={scan.image_url} 
+                                alt={scan.medicine_name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Pill size={24} className="text-gray-400" />
+                            )}
+                          </div>
+                          
+                          {/* Medicine Info */}
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{scan.medicine_name}</h3>
+                            <p className="text-sm text-gray-600">{scan.manufacturer}</p>
+                            <p className="text-xs text-gray-400">
+                              {new Date(scan.created_at).toLocaleTimeString('en-US', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Delete Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering the parent click
+                            handleDeleteScan(scan.id);
+                          }}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Add the missing file input element before the main render logic
   return (
     <div className="App">
@@ -681,22 +1144,37 @@ const MediScanApp = () => {
         className="hidden"
       />
       
-      {(() => {
-        switch (currentPage) {
-          case 'camera':
-            return <CameraPage />;
-          case 'preview':
-            return <PreviewPage />;
-          case 'results':
-            return <ResultsPage />;
-          case 'auth':
-            return <AuthPage />;
-          case 'medications':
-            return <MedicationsPage />;
-          default:
-            return <CameraPage />;
-        }
-      })()}
+      {loading ? (
+        // Show loading state while checking authentication
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        // Show the requested page
+        (() => {
+          switch (currentPage) {
+            case 'camera':
+              return <CameraPage />;
+            case 'preview':
+              return <PreviewPage />;
+            case 'results':
+              return <ResultsPage />;
+            case 'auth':
+              return <AuthPage />;
+            case 'medications':
+              return <MedicationsPage />;
+            case 'profile':
+              return <ProfilePage />;
+            case 'scan-history':
+              return <ScanHistoryPage />;
+            default:
+              return <CameraPage />;
+          }
+        })()
+      )}
     </div>
   );
 };

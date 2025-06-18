@@ -14,7 +14,7 @@ app.use(bodyParser.json({ limit: '10mb' }));
 // Endpoint to proxy AI analysis requests
 app.post('/analyze', async (req, res) => {
   const { imageBase64 } = req.body;
-  const apiKey = process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ error: 'API key not configured on server.' });
@@ -24,6 +24,9 @@ app.post('/analyze', async (req, res) => {
   }
 
   try {
+    // Clean the base64 data (remove data:image/jpeg;base64, prefix if present)
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
+    
     // Initialize Google AI
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-04-17' });
@@ -54,7 +57,7 @@ If a field is not identifiable, return "Not Available".
 
     const imagePart = {
       inlineData: {
-        data: imageBase64,
+        data: cleanBase64,
         mimeType: 'image/jpeg',
       },
     };
@@ -70,7 +73,7 @@ If a field is not identifiable, return "Not Available".
     res.json(parsedData);
   } catch (error) {
     console.error('Google AI Error:', error);
-    res.status(500).json({ error: 'Failed to analyze image with Google AI.' });
+    res.status(500).json({ error: 'Failed to analyze image with Google AI.', details: error.message });
   }
 });
 
