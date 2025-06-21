@@ -9,6 +9,136 @@ import {
   Star, Mail, Pill, History, CreditCard, LogOut, Trash2, Image, Send
 } from 'lucide-react';
 
+// Isolated Follow-up Question Component to prevent scroll issues
+const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
+  const [followUpQuestion, setFollowUpQuestion] = useState('');
+  const [followUpAnswer, setFollowUpAnswer] = useState('');
+  const [isLoadingAnswer, setIsLoadingAnswer] = useState(false);
+  
+  const handleInputChange = (e) => {
+    setFollowUpQuestion(e.target.value);
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!followUpQuestion.trim() || !medicineData) return;
+    
+    setIsLoadingAnswer(true);
+    setFollowUpAnswer('');
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/ask-follow-up`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: followUpQuestion,
+          medicineData,
+          userId: user?.id || null,
+          scanId: null
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get answer');
+      }
+
+      const { answer } = await response.json();
+      setFollowUpAnswer(answer);
+      
+      // Save the question and answer to the database if user is logged in
+      if (user) {
+        await saveFollowUpQuestion(followUpQuestion, answer);
+      }
+    } catch (error) {
+      console.error('Error getting follow-up answer:', error);
+      setFollowUpAnswer('Sorry, we could not process your question. Please try again.');
+    } finally {
+      setIsLoadingAnswer(false);
+    }
+  };
+  
+  const saveFollowUpQuestion = async (question, answer) => {
+    if (!user) return;
+    
+    try {
+      // Find the scan ID if it exists
+      const { data: scanData } = await supabase
+        .from('scan_history')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('medicine_name', medicineData.name)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      const scanId = scanData && scanData.length > 0 ? scanData[0].id : null;
+      
+      // Insert the follow-up question
+      const { error } = await supabase
+        .from('follow_up_questions')
+        .insert({
+          scan_id: scanId,
+          user_id: user.id,
+          question,
+          answer
+        });
+      
+      if (error) throw error;
+      
+    } catch (error) {
+      console.error('Error saving follow-up question:', error);
+    }
+  };
+  
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Search className="w-5 h-5 text-indigo-500" />
+        <h2 className="font-semibold text-lg">Ask a Follow-up Question</h2>
+      </div>
+      
+      <form onSubmit={handleSubmit} className="mb-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={followUpQuestion}
+            onChange={handleInputChange}
+            placeholder="Type a follow-up question"
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isLoadingAnswer}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
+          />
+          <button
+            type="submit"
+            disabled={isLoadingAnswer || !followUpQuestion.trim()}
+            className={`p-3 rounded-full ${isLoadingAnswer || !followUpQuestion.trim() ? 'bg-gray-300' : 'bg-black'} flex items-center justify-center`}
+          >
+            <Send className={`w-5 h-5 ${isLoadingAnswer || !followUpQuestion.trim() ? 'text-gray-500' : 'text-white'}`} />
+          </button>
+        </div>
+      </form>
+      
+      {isLoadingAnswer && (
+        <div className="flex items-center justify-center py-4">
+          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+          <span className="ml-2 text-gray-600">Getting answer...</span>
+        </div>
+      )}
+      
+      {followUpAnswer && (
+        <div className="bg-blue-50 p-4 rounded-xl">
+          <p className="text-gray-800">{followUpAnswer}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MediScanApp = () => {
   const { user, loading } = useAuth(); // Get user from AuthContext
   const [currentPage, setCurrentPage] = useState('camera');
@@ -21,11 +151,6 @@ const MediScanApp = () => {
   const fileInputRef = useRef(null);
   const [previousPage, setPreviousPage] = useState(null); // Track previous page for navigation
   const [isMedicationSaved, setIsMedicationSaved] = useState(false); // Track if current medicine is saved
-  const [followUpQuestion, setFollowUpQuestion] = useState(''); // State for follow-up question
-  const [followUpAnswer, setFollowUpAnswer] = useState(''); // State for follow-up answer
-  const [isLoadingAnswer, setIsLoadingAnswer] = useState(false); // Loading state for follow-up questions
-  const followUpInputRef = useRef(null); // Reference to the follow-up question input
-  const scrollPositionRef = useRef(0); // Reference to store scroll position
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -68,20 +193,6 @@ const MediScanApp = () => {
       loadUserMedications();
     }
   }, [user]);
-
-  // Handle follow-up question input change with scroll position preservation
-  const handleFollowUpInputChange = (e) => {
-    // Store current scroll position before state update
-    scrollPositionRef.current = window.scrollY;
-    setFollowUpQuestion(e.target.value);
-  };
-
-  // Restore scroll position after render
-  useEffect(() => {
-    if (scrollPositionRef.current > 0) {
-      window.scrollTo(0, scrollPositionRef.current);
-    }
-  }, [followUpQuestion]);
 
   // Mock medicine data
   const mockMedicineData = {
@@ -151,82 +262,6 @@ const MediScanApp = () => {
       setMedicineData(null);
     } finally {
       setIsAnalyzing(false);
-    }
-  };
-
-  // Handle follow-up question submission
-  const handleFollowUpQuestion = async (e) => {
-    e.preventDefault();
-    
-    if (!followUpQuestion.trim() || !medicineData) return;
-    
-    setIsLoadingAnswer(true);
-    setFollowUpAnswer('');
-    
-    try {
-      const response = await fetch(`${BACKEND_URL}/ask-follow-up`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: followUpQuestion,
-          medicineData,
-          userId: user?.id || null,
-          scanId: null // This would be populated if we're viewing a scan from history
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get answer');
-      }
-
-      const { answer } = await response.json();
-      setFollowUpAnswer(answer);
-      
-      // Save the question and answer to the database if user is logged in
-      if (user) {
-        await saveFollowUpQuestion(followUpQuestion, answer);
-      }
-    } catch (error) {
-      console.error('Error getting follow-up answer:', error);
-      setFollowUpAnswer('Sorry, we could not process your question. Please try again.');
-    } finally {
-      setIsLoadingAnswer(false);
-    }
-  };
-
-  // Save follow-up question to database
-  const saveFollowUpQuestion = async (question, answer) => {
-    if (!user) return;
-    
-    try {
-      // Find the scan ID if it exists
-      const { data: scanData } = await supabase
-        .from('scan_history')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('medicine_name', medicineData.name)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      const scanId = scanData && scanData.length > 0 ? scanData[0].id : null;
-      
-      // Insert the follow-up question
-      const { error } = await supabase
-        .from('follow_up_questions')
-        .insert({
-          scan_id: scanId,
-          user_id: user.id,
-          question,
-          answer
-        });
-      
-      if (error) throw error;
-      
-    } catch (error) {
-      console.error('Error saving follow-up question:', error);
     }
   };
 
@@ -848,47 +883,12 @@ const MediScanApp = () => {
             </div>
             <hr className="my-4 border-gray-200" />
             
-            {/* Follow-up Question Section */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Search className="w-5 h-5 text-indigo-500" />
-                <h2 className="font-semibold text-lg">Ask a Follow-up Question</h2>
-              </div>
-              
-              <form onSubmit={handleFollowUpQuestion} className="mb-4">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    ref={followUpInputRef}
-                    value={followUpQuestion}
-                    onChange={handleFollowUpInputChange}
-                    placeholder="Type a follow-up question"
-                    className="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={isLoadingAnswer}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isLoadingAnswer || !followUpQuestion.trim()}
-                    className={`p-3 rounded-full ${isLoadingAnswer || !followUpQuestion.trim() ? 'bg-gray-300' : 'bg-black'} flex items-center justify-center`}
-                  >
-                    <Send className={`w-5 h-5 ${isLoadingAnswer || !followUpQuestion.trim() ? 'text-gray-500' : 'text-white'}`} />
-                  </button>
-                </div>
-              </form>
-              
-              {isLoadingAnswer && (
-                <div className="flex items-center justify-center py-4">
-                  <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-                  <span className="ml-2 text-gray-600">Getting answer...</span>
-                </div>
-              )}
-              
-              {followUpAnswer && (
-                <div className="bg-blue-50 p-4 rounded-xl">
-                  <p className="text-gray-800">{followUpAnswer}</p>
-                </div>
-              )}
-            </div>
+            {/* Follow-up Question Section - Using isolated component */}
+            <FollowUpQuestionSection 
+              medicineData={medicineData} 
+              user={user} 
+              BACKEND_URL={BACKEND_URL} 
+            />
             
             <hr className="my-4 border-gray-200" />
             
