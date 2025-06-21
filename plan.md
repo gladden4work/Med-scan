@@ -78,8 +78,22 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Loading State**: Added loading spinner during authentication check
 - **Consistent Navigation**: All navigation now uses consistent function calls for better state management
 
+### My Medications Feature - IN PROGRESS
+- **Grid View UI**: Updating My Medications page to display medications in a responsive grid layout
+- **Supabase Integration**: Creating a user_medications table to persist saved medications
+- **Save/Unsave Toggle**: Adding functionality to toggle between saving and removing medications
+- **Button State**: Dynamically changing the "Add to My Medications" button to "Unsave" when a medication is already saved
+
+#### Technical Implementation:
+1. **Database Schema**: Creating a user_medications table with RLS policies
+2. **Data Persistence**: Implementing CRUD operations for user medications
+3. **UI Enhancement**: Converting list view to grid view with medication cards
+4. **Toggle Functionality**: Adding logic to check if a medication exists and toggle its saved state
+5. **Visual Feedback**: Updating button text and style based on medication saved status
+
 ### File Changes:
 - **Modified**: `src/App.jsx` - Updated authentication flow, navigation system and scan history viewing functionality
+- **New**: `database/user_medications_table.sql` - SQL schema for the user_medications table
 
 ### Technical Implementation:
 - **Authentication Flow**: Replaced automatic redirect with `checkAuthAndNavigate` function that conditionally prompts for login
@@ -108,6 +122,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [x] **Authentication Flow**: Ensure proper user session management
 - [x] **Navigation Improvements**: Implement proper navigation and back button handling
 - [x] **Clickable Scan History**: Make scan history items clickable to view past scan details
+- [ ] **My Medications Feature**: Implement grid view UI and save/unsave functionality
 - [ ] **Error Handling**: Improve error states and user feedback
 - [ ] **End-to-End Testing**: Verify scan history saves and displays correctly
 
@@ -126,7 +141,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [ ] **Image Handling**: Mobile camera integration and image processing
 
 ## Current Goal
-Replace mock image capture with real camera/file input handling for better UX and mobile support.
+Implement the My Medications feature with grid view UI and save/unsave functionality using Supabase for data persistence.
 
 ## Engineering Project Plan
 
@@ -145,6 +160,8 @@ Replace mock image capture with real camera/file input handling for better UX an
 - `mediscan-app/src/App.jsx`: The main React component for the frontend UI and logic.
 - `mediscan-app/package.json`: Manages frontend dependencies and scripts, including the `dev:all` script to run both servers.
 - `.gitignore`: Specifies which files and folders Git should ignore, preventing secrets and unnecessary files from being committed.
+- `database/scan_history_table.sql`: SQL schema for the scan history table.
+- `database/user_medications_table.sql`: SQL schema for the user medications table (to be created).
 
 ## Task List
 
@@ -171,8 +188,9 @@ Replace mock image capture with real camera/file input handling for better UX an
 ### Phase 3: Core Features & UX
 - [ ] Replace mock image capture with real camera/file input handling.
 - [x] Implement Profile page with authentication flow (sign in & sign-up).
-- [ ] Persist medications list (local storage or backend).
+- [ ] Implement My Medications page with grid view and save/unsave functionality.
+- [ ] Persist medications list using Supabase.
 - [ ] Add unit & E2E tests; set up CI.
 
 ## Current Goal
-Replace mock image capture with real camera/file input handling for better UX and mobile support.
+Implement the My Medications feature with grid view UI and save/unsave functionality using Supabase for data persistence.

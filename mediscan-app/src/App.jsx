@@ -20,6 +20,7 @@ const MediScanApp = () => {
   const [medicineData, setMedicineData] = useState(null);
   const fileInputRef = useRef(null);
   const [previousPage, setPreviousPage] = useState(null); // Track previous page for navigation
+  const [isMedicationSaved, setIsMedicationSaved] = useState(false); // Track if current medicine is saved
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -59,6 +60,7 @@ const MediScanApp = () => {
   useEffect(() => {
     if (user) {
       loadScanHistory();
+      loadUserMedications();
     }
   }, [user]);
 
@@ -133,15 +135,165 @@ const MediScanApp = () => {
     }
   };
 
-  const handleAddToMedications = () => {
-    const newMed = {
-      ...medicineData,
-      id: Date.now(),
-      frequency: 'daily',
-      addedDate: new Date().toISOString()
-    };
-    setMedications([...medications, newMed]);
+  // Load user medications from Supabase
+  const loadUserMedications = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_medications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setMedications(data || []);
+    } catch (error) {
+      console.error('Error loading medications:', error);
+    }
   };
+
+  // Check if a medicine is already saved
+  const checkMedicationExists = (medicineName) => {
+    return medications.some(med => med.medicine_name === medicineName);
+  };
+
+  // Toggle add/remove medication
+  const handleAddToMedications = async () => {
+    if (!user) {
+      // If not logged in, redirect to auth page
+      navigateTo('auth');
+      return;
+    }
+
+    try {
+      // Check if medication already exists
+      const exists = checkMedicationExists(medicineData.name);
+      
+      if (exists) {
+        // If exists, find the medication and delete it
+        const medToDelete = medications.find(med => med.medicine_name === medicineData.name);
+        if (medToDelete) {
+          await removeMedicationFromList(medToDelete.id);
+        }
+      } else {
+        // If doesn't exist, add it
+        await addMedicationToList();
+      }
+
+      // Toggle the saved state
+      setIsMedicationSaved(!exists);
+    } catch (error) {
+      console.error('Error managing medication:', error);
+      alert('Failed to update medication. Please try again.');
+    }
+  };
+
+  // Add medication to user's list
+  const addMedicationToList = async () => {
+    try {
+      let imageUrl = null;
+
+      // Upload image to Supabase Storage if capturedImage is provided
+      if (capturedImage) {
+        // Check if capturedImage is a URL or base64
+        if (capturedImage.startsWith('http')) {
+          imageUrl = capturedImage;
+        } else {
+          // Convert base64 to blob
+          const base64Data = capturedImage.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+          // Create unique filename with user ID and timestamp
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const fileName = `${user.id}/medications/${timestamp}-med.jpg`;
+
+          // Upload to Supabase Storage
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('scan-images')
+            .upload(fileName, blob, {
+              contentType: 'image/jpeg',
+              upsert: false
+            });
+
+          if (uploadError) {
+            console.error('Error uploading image:', uploadError);
+            throw uploadError;
+          }
+
+          // Get public URL for the uploaded image
+          const { data: urlData } = supabase.storage
+            .from('scan-images')
+            .getPublicUrl(fileName);
+
+          imageUrl = urlData.publicUrl;
+        }
+      }
+
+      // Create medication record
+      const medicationRecord = {
+        user_id: user.id,
+        medicine_name: medicineData.name,
+        manufacturer: medicineData.manufacturer,
+        image_url: imageUrl,
+        medicine_data: medicineData,
+        frequency: 'daily',
+        created_at: new Date().toISOString()
+      };
+
+      // Insert into Supabase
+      const { data, error } = await supabase
+        .from('user_medications')
+        .insert([medicationRecord]);
+
+      if (error) throw error;
+      
+      // Reload medications list
+      loadUserMedications();
+      
+      console.log('Medication saved successfully');
+    } catch (error) {
+      console.error('Error saving medication:', error);
+      throw error;
+    }
+  };
+
+  // Remove medication from user's list
+  const removeMedicationFromList = async (medicationId) => {
+    try {
+      // Delete from Supabase
+      const { error } = await supabase
+        .from('user_medications')
+        .delete()
+        .eq('id', medicationId);
+
+      if (error) throw error;
+      
+      // Reload medications list
+      loadUserMedications();
+      
+      console.log('Medication removed successfully');
+    } catch (error) {
+      console.error('Error removing medication:', error);
+      throw error;
+    }
+  };
+
+  // Check if current medicine is saved when medicineData changes
+  useEffect(() => {
+    if (medicineData && user) {
+      const exists = checkMedicationExists(medicineData.name);
+      setIsMedicationSaved(exists);
+    } else {
+      setIsMedicationSaved(false);
+    }
+  }, [medicineData, medications, user]);
 
   const generateShareLink = () => {
     const shareUrl = `https://mediscan.app/medicine/${medicineData.name.replace(/\s+/g, '-').toLowerCase()}`;
@@ -594,10 +746,19 @@ const MediScanApp = () => {
   <div className="flex gap-4 mt-6">
     <button
       onClick={handleAddToMedications}
-      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors"
+      className={`flex-1 ${isMedicationSaved ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors`}
     >
-      <Plus className="w-5 h-5" />
-      <span>Add to My Medications</span>
+      {isMedicationSaved ? (
+        <>
+          <X className="w-5 h-5" />
+          <span>Unsave</span>
+        </>
+      ) : (
+        <>
+          <Plus className="w-5 h-5" />
+          <span>Add to My Medications</span>
+        </>
+      )}
     </button>
     <button
       onClick={generateShareLink}
@@ -876,14 +1037,57 @@ const MediScanApp = () => {
               <p className="text-gray-500">No medications saved yet</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {medications.map((med) => (
-                <div key={med.id} className="bg-white rounded-lg p-4 shadow-sm">
-                  <h3 className="font-semibold">{med.name}</h3>
-                  <p className="text-sm text-gray-600">{med.manufacturer}</p>
-                </div>
-              ))}
-            </div>
+            <>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Recently saved</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {medications.map((med) => (
+                  <div 
+                    key={med.id} 
+                    className="bg-white rounded-lg overflow-hidden shadow-sm"
+                  >
+                    {/* Medication Image */}
+                    <div className="h-32 bg-gray-200 relative">
+                      {med.image_url ? (
+                        <img 
+                          src={med.image_url} 
+                          alt={med.medicine_name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Pill size={32} className="text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Medication Info */}
+                    <div className="p-3">
+                      <h3 className="font-semibold text-gray-900 truncate">{med.medicine_name}</h3>
+                      <p className="text-sm text-gray-600 truncate">{med.manufacturer}</p>
+                      
+                      {/* Category Badge */}
+                      {med.medicine_data?.category && (
+                        <div className="mt-2">
+                          <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
+                            {med.medicine_data.category}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Remove Button */}
+                    <div className="px-3 pb-3 flex justify-end">
+                      <button
+                        onClick={() => removeMedicationFromList(med.id)}
+                        className="text-xs text-red-600 hover:text-red-800"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
