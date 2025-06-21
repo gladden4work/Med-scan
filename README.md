@@ -229,12 +229,21 @@ Remember to:
   - Removed redundant "Save to History" button (saves automatically)
   - Better visual feedback with cursor indicators for interactive elements
 
+- **My Medications Feature**:
+  - Grid view display of saved medications
+  - Save/unsave functionality with visual feedback
+  - Detailed medication view with complete information
+  - Soft delete functionality (records marked as hidden rather than removed)
+
 ### 🔧 Technical Improvements
 - **Navigation Architecture**: Added `navigateTo` and `checkAuthAndNavigate` functions for better state management
 - **History State Management**: Implemented tracking of previous page for improved navigation paths
 - **Protected Routes Logic**: Added conditional authentication checks for profile-related features
 - **Scan Details Retrieval**: New functionality to load and display previously saved scan details
 - **UI Responsiveness**: Enhanced clickable areas and interactive elements for better mobile experience
+- **Soft Delete Implementation**: Used PostgreSQL stored functions with `SECURITY DEFINER` privileges to handle soft deletes securely
+- **Shared Components**: Extended the ResultsPage component to handle both scan history and medication details views
+- **Database Optimization**: Added is_deleted flag with appropriate indexes for efficient filtering of active records
 
 ### 🚀 Current Status
 - ✅ Frontend running on http://localhost:5175/
@@ -245,8 +254,22 @@ Remember to:
 - ✅ Interactive scan history with clickable items
 - ✅ Improved navigation with proper state management
 - ✅ Profile management with secure sign-out
+- ✅ My Medications with grid view and soft delete
+- ✅ Shared medication and scan details view
 
 The application now provides a more intuitive user experience with improved navigation flows and interactive features.
+
+## Database Structure
+
+### Tables
+- **scan_history**: Stores user scan records with soft delete capability
+- **user_medications**: Stores user saved medications with soft delete capability
+
+### Database Functions
+- **soft_delete_scan_history**: Securely handles soft deletion of scan history records
+- **soft_delete_medication**: Securely handles soft deletion of medication records
+
+These functions use `SECURITY DEFINER` privileges to bypass RLS issues while maintaining proper permission checks.
 
 ## Contributing
 
