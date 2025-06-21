@@ -177,8 +177,9 @@ const MediScanApp = () => {
       setCapturedImage(scan.image_url);
     }
     
-    // Navigate to the results page
-    navigateTo('results');
+    // Explicitly set previousPage to 'scan-history' before navigating
+    setPreviousPage('scan-history');
+    setCurrentPage('results');
   };
 
   // Save scan to history
@@ -459,11 +460,19 @@ const MediScanApp = () => {
         <div className="min-h-screen bg-gray-50">
           <div className="px-6 py-8">
             <button
-              onClick={() => setCurrentPage('camera')}
+              onClick={() => {
+                // If coming from scan-history, go back there
+                if (previousPage === 'scan-history') {
+                  navigateTo('scan-history');
+                } else {
+                  // Otherwise go back to camera
+                  navigateTo('camera');
+                }
+              }}
               className="flex items-center space-x-2 text-gray-600 mb-6"
             >
               <ChevronLeft className="w-5 h-5" />
-              <span>Back to camera</span>
+              <span>Back</span>
             </button>
 
             <div className="text-center py-16">
@@ -489,7 +498,15 @@ const MediScanApp = () => {
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => navigateTo('camera')}
+            onClick={() => {
+              // If coming from scan-history, go back there
+              if (previousPage === 'scan-history') {
+                navigateTo('scan-history');
+              } else {
+                // Otherwise go back to camera
+                navigateTo('camera');
+              }
+            }}
             className="flex items-center space-x-2 text-gray-600"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -843,7 +860,7 @@ const MediScanApp = () => {
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => setCurrentPage('camera')}
+            onClick={() => navigateTo('profile')}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
           >
             <ChevronLeft size={24} />
@@ -903,7 +920,7 @@ const MediScanApp = () => {
         if (error) throw error;
         
         // Reset app state and redirect to auth page
-        setCurrentPage('auth');
+        navigateTo('auth');
       } catch (error) {
         console.error('Error signing out:', error);
         alert('Error signing out. Please try again.');
@@ -915,7 +932,7 @@ const MediScanApp = () => {
         {/* Header */}
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => setCurrentPage('camera')}
+            onClick={() => navigateTo('camera')}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
           >
             <ChevronLeft size={24} />
@@ -959,7 +976,7 @@ const MediScanApp = () => {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Medication</h3>
             <div className="space-y-3">
               <button
-                onClick={() => setCurrentPage('medications')}
+                onClick={() => navigateTo('medications')}
                 className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div className="flex items-center space-x-3">
@@ -970,7 +987,7 @@ const MediScanApp = () => {
               </button>
               
               <button
-                onClick={() => setCurrentPage('scan-history')}
+                onClick={() => navigateTo('scan-history')}
                 className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div className="flex items-center space-x-3">
