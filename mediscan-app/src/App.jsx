@@ -24,6 +24,8 @@ const MediScanApp = () => {
   const [followUpQuestion, setFollowUpQuestion] = useState(''); // State for follow-up question
   const [followUpAnswer, setFollowUpAnswer] = useState(''); // State for follow-up answer
   const [isLoadingAnswer, setIsLoadingAnswer] = useState(false); // Loading state for follow-up questions
+  const followUpInputRef = useRef(null); // Reference to the follow-up question input
+  const scrollPositionRef = useRef(0); // Reference to store scroll position
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -66,6 +68,20 @@ const MediScanApp = () => {
       loadUserMedications();
     }
   }, [user]);
+
+  // Handle follow-up question input change with scroll position preservation
+  const handleFollowUpInputChange = (e) => {
+    // Store current scroll position before state update
+    scrollPositionRef.current = window.scrollY;
+    setFollowUpQuestion(e.target.value);
+  };
+
+  // Restore scroll position after render
+  useEffect(() => {
+    if (scrollPositionRef.current > 0) {
+      window.scrollTo(0, scrollPositionRef.current);
+    }
+  }, [followUpQuestion]);
 
   // Mock medicine data
   const mockMedicineData = {
@@ -843,8 +859,9 @@ const MediScanApp = () => {
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    ref={followUpInputRef}
                     value={followUpQuestion}
-                    onChange={(e) => setFollowUpQuestion(e.target.value)}
+                    onChange={handleFollowUpInputChange}
                     placeholder="Type a follow-up question"
                     className="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={isLoadingAnswer}
