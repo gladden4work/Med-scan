@@ -6,7 +6,7 @@ import { useAuth } from './AuthContext.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
   Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
-  Star, Mail, Pill, History, CreditCard, LogOut, Trash2
+  Star, Mail, Pill, History, CreditCard, LogOut, Trash2, Image
 } from 'lucide-react';
 
 const MediScanApp = () => {
@@ -144,6 +144,7 @@ const MediScanApp = () => {
         .from('user_medications')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_deleted', false) // Only load non-deleted medications
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -158,130 +159,136 @@ const MediScanApp = () => {
     return medications.some(med => med.medicine_name === medicineName);
   };
 
-  // Toggle add/remove medication
-  const handleAddToMedications = async () => {
-    if (!user) {
-      // If not logged in, redirect to auth page
-      navigateTo('auth');
-      return;
-    }
+  // Check if the current medicine is saved in user's medications
+  const checkIfMedicationSaved = async () => {
+    if (!user || !medicineData) return;
 
     try {
-      // Check if medication already exists
-      const exists = checkMedicationExists(medicineData.name);
-      
-      if (exists) {
-        // If exists, find the medication and delete it
-        const medToDelete = medications.find(med => med.medicine_name === medicineData.name);
-        if (medToDelete) {
-          await removeMedicationFromList(medToDelete.id);
-        }
-      } else {
-        // If doesn't exist, add it
-        await addMedicationToList();
-      }
-
-      // Toggle the saved state
-      setIsMedicationSaved(!exists);
-    } catch (error) {
-      console.error('Error managing medication:', error);
-      alert('Failed to update medication. Please try again.');
-    }
-  };
-
-  // Add medication to user's list
-  const addMedicationToList = async () => {
-    try {
-      let imageUrl = null;
-
-      // Upload image to Supabase Storage if capturedImage is provided
-      if (capturedImage) {
-        // Check if capturedImage is a URL or base64
-        if (capturedImage.startsWith('http')) {
-          imageUrl = capturedImage;
-        } else {
-          // Convert base64 to blob
-          const base64Data = capturedImage.split(',')[1]; // Remove data:image/jpeg;base64, prefix
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'image/jpeg' });
-
-          // Create unique filename with user ID and timestamp
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const fileName = `${user.id}/medications/${timestamp}-med.jpg`;
-
-          // Upload to Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('scan-images')
-            .upload(fileName, blob, {
-              contentType: 'image/jpeg',
-              upsert: false
-            });
-
-          if (uploadError) {
-            console.error('Error uploading image:', uploadError);
-            throw uploadError;
-          }
-
-          // Get public URL for the uploaded image
-          const { data: urlData } = supabase.storage
-            .from('scan-images')
-            .getPublicUrl(fileName);
-
-          imageUrl = urlData.publicUrl;
-        }
-      }
-
-      // Create medication record
-      const medicationRecord = {
-        user_id: user.id,
-        medicine_name: medicineData.name,
-        manufacturer: medicineData.manufacturer,
-        image_url: imageUrl,
-        medicine_data: medicineData,
-        frequency: 'daily',
-        created_at: new Date().toISOString()
-      };
-
-      // Insert into Supabase
       const { data, error } = await supabase
         .from('user_medications')
-        .insert([medicationRecord]);
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('medicine_name', medicineData.name)
+        .eq('is_deleted', false)
+        .limit(1);
 
       if (error) throw error;
       
-      // Reload medications list
-      loadUserMedications();
-      
-      console.log('Medication saved successfully');
+      // Update state based on whether the medication exists
+      setIsMedicationSaved(data && data.length > 0);
     } catch (error) {
-      console.error('Error saving medication:', error);
-      throw error;
+      console.error('Error checking if medication is saved:', error);
     }
   };
 
-  // Remove medication from user's list
-  const removeMedicationFromList = async (medicationId) => {
-    try {
-      // Delete from Supabase
-      const { error } = await supabase
-        .from('user_medications')
-        .delete()
-        .eq('id', medicationId);
-
-      if (error) throw error;
-      
-      // Reload medications list
+  // Load all data when page changes or user logs in
+  useEffect(() => {
+    if (currentPage === 'scan-history') {
+      loadScanHistory();
+    } else if (currentPage === 'medications') {
       loadUserMedications();
-      
-      console.log('Medication removed successfully');
+    } else if (currentPage === 'results' && user) {
+      // Check if the current medicine is saved when viewing results
+      checkIfMedicationSaved();
+    }
+  }, [currentPage, user, medicineData?.name]);
+
+  // Add medication to user's list
+  const handleAddToMedications = async () => {
+    // If not authenticated, prompt to sign in
+    if (!user) {
+      return checkAuthAndNavigate('results', async () => {
+        // After authentication, try adding medication again
+        handleAddToMedications();
+      });
+    }
+
+    try {
+      // If the medication is already saved, remove it
+      if (isMedicationSaved) {
+        // Find the medication ID first
+        const { data, error: findError } = await supabase
+          .from('user_medications')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('medicine_name', medicineData.name)
+          .eq('is_deleted', false)
+          .limit(1);
+        
+        if (findError) throw findError;
+        
+        if (data && data.length > 0) {
+          // Soft delete the medication
+          const { error: deleteError } = await supabase
+            .from('user_medications')
+            .update({ is_deleted: true })
+            .eq('id', data[0].id);
+          
+          if (deleteError) throw deleteError;
+          
+          // Update state
+          setIsMedicationSaved(false);
+          console.log('Medication removed from list');
+        }
+      } else {
+        // Add to medications
+        let imageUrl = null;
+        
+        // If we have a captured image, upload it to storage
+        if (capturedImage) {
+          // If image is a base64 string, convert to blob
+          if (capturedImage.startsWith('data:')) {
+            const response = await fetch(capturedImage);
+            const blob = await response.blob();
+            
+            // Create unique filename
+            const userId = user.id;
+            const timestamp = new Date().getTime();
+            const fileName = `${userId}/${timestamp}-medication.jpg`;
+            
+            // Upload to Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('scan-images')
+              .upload(fileName, blob, {
+                contentType: 'image/jpeg',
+                upsert: false
+              });
+            
+            if (uploadError) throw uploadError;
+            
+            // Get the public URL for the uploaded image
+            const { data: { publicUrl } } = supabase.storage
+              .from('scan-images')
+              .getPublicUrl(fileName);
+              
+            imageUrl = publicUrl;
+          } else {
+            // If it's already a URL, use it directly
+            imageUrl = capturedImage;
+          }
+        }
+        
+        // Save medication to Supabase
+        const { error: saveError } = await supabase
+          .from('user_medications')
+          .insert({
+            user_id: user.id,
+            medicine_name: medicineData.name,
+            manufacturer: medicineData.manufacturer || '',
+            image_url: imageUrl,
+            medicine_data: medicineData,
+            is_deleted: false
+          });
+        
+        if (saveError) throw saveError;
+        
+        // Update state
+        setIsMedicationSaved(true);
+        console.log('Medication added to list');
+      }
     } catch (error) {
-      console.error('Error removing medication:', error);
-      throw error;
+      console.error('Error managing medication:', error);
+      alert('Failed to save medication. Please try again.');
     }
   };
 
@@ -310,6 +317,7 @@ const MediScanApp = () => {
         .from('scan_history')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_deleted', false) // Only load non-deleted scan history
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -331,6 +339,21 @@ const MediScanApp = () => {
     
     // Explicitly set previousPage to 'scan-history' before navigating
     setPreviousPage('scan-history');
+    setCurrentPage('results');
+  };
+
+  // View details of a saved medication
+  const viewMedicationDetails = (med) => {
+    // Set the medicine data from the saved medication
+    setMedicineData(med.medicine_data);
+    
+    // Set the image URL or base64 data
+    if (med.image_url) {
+      setCapturedImage(med.image_url);
+    }
+    
+    // Explicitly set previousPage to 'medications' before navigating
+    setPreviousPage('medications');
     setCurrentPage('results');
   };
 
@@ -403,52 +426,24 @@ const MediScanApp = () => {
     }
   };
 
-  // Delete scan from history
+  // Delete scan from history (soft delete)
   const deleteScanFromHistory = async (scanId) => {
     try {
-      // First, get the scan record to find the image URL
-      const { data: scanData, error: fetchError } = await supabase
+      // Soft delete from Supabase by updating is_deleted flag
+      const { error } = await supabase
         .from('scan_history')
-        .select('image_url')
-        .eq('id', scanId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      // Delete the scan record from database
-      const { error: deleteError } = await supabase
-        .from('scan_history')
-        .delete()
+        .update({ is_deleted: true })
         .eq('id', scanId);
 
-      if (deleteError) throw deleteError;
-
-      // Delete the associated image from storage if it exists
-      if (scanData?.image_url) {
-        try {
-          // Extract filename from the public URL
-          const url = new URL(scanData.image_url);
-          const pathParts = url.pathname.split('/');
-          const fileName = pathParts.slice(-2).join('/'); // Get user_id/filename.jpg
-
-          const { error: storageError } = await supabase.storage
-            .from('scan-images')
-            .remove([fileName]);
-
-          if (storageError) {
-            console.error('Error deleting image from storage:', storageError);
-            // Don't throw here - scan record is already deleted
-          }
-        } catch (urlError) {
-          console.error('Error parsing image URL for deletion:', urlError);
-        }
-      }
+      if (error) throw error;
       
-      // Reload scan history
+      // Reload scan history to show only non-deleted items
       loadScanHistory();
+      
+      console.log('Scan history removed successfully');
     } catch (error) {
-      console.error('Error deleting scan:', error);
-      alert('Failed to delete scan. Please try again.');
+      console.error('Error removing scan history:', error);
+      alert('Failed to remove scan. Please try again.');
     }
   };
 
@@ -593,6 +588,17 @@ const MediScanApp = () => {
 
   // Results Page Component
   const ResultsPage = () => {
+    // Determine the appropriate back navigation based on the source
+    const handleBackNavigation = () => {
+      if (previousPage === 'scan-history') {
+        navigateTo('scan-history');
+      } else if (previousPage === 'medications') {
+        navigateTo('medications');
+      } else {
+        navigateTo('camera');
+      }
+    };
+    
     if (isAnalyzing) {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -612,15 +618,7 @@ const MediScanApp = () => {
         <div className="min-h-screen bg-gray-50">
           <div className="px-6 py-8">
             <button
-              onClick={() => {
-                // If coming from scan-history, go back there
-                if (previousPage === 'scan-history') {
-                  navigateTo('scan-history');
-                } else {
-                  // Otherwise go back to camera
-                  navigateTo('camera');
-                }
-              }}
+              onClick={handleBackNavigation}
               className="flex items-center space-x-2 text-gray-600 mb-6"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -650,15 +648,7 @@ const MediScanApp = () => {
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => {
-              // If coming from scan-history, go back there
-              if (previousPage === 'scan-history') {
-                navigateTo('scan-history');
-              } else {
-                // Otherwise go back to camera
-                navigateTo('camera');
-              }
-            }}
+            onClick={handleBackNavigation}
             className="flex items-center space-x-2 text-gray-600"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -682,93 +672,95 @@ const MediScanApp = () => {
           </div>
 
           <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-  <h1 className="text-2xl font-bold text-gray-900 mb-1">{medicineData.name}</h1>
-  <p className="text-gray-600 mb-2">{medicineData.manufacturer}</p>
-  <div className="mb-4">
-    <span className="inline-block bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full font-semibold">{medicineData.category}</span>
-  </div>
-  <div className="mb-4">
-  <div className="flex items-center gap-2 mb-1">
-    <Info className="w-5 h-5 text-blue-500" />
-    <h2 className="font-semibold text-lg">Description</h2>
-  </div>
-  <p className="text-gray-700">{medicineData.description}</p>
-</div>
-<hr className="my-4 border-gray-200" />
-<div className="mb-4">
-  <div className="flex items-center gap-2 mb-1">
-    <Search className="w-5 h-5 text-green-500" />
-    <h2 className="font-semibold text-lg">How It Works</h2>
-  </div>
-  <p className="text-gray-700">{medicineData.howItWorks}</p>
-</div>
-<hr className="my-4 border-gray-200" />
-<div className="mb-4">
-  <div className="flex items-center gap-2 mb-1">
-    <Heart className="w-5 h-5 text-pink-500" />
-    <h2 className="font-semibold text-lg">Dosage</h2>
-  </div>
-  <ul className="text-gray-700 list-none ml-0">
-    <li className="flex items-center gap-2 mb-1">
-      <User className="w-4 h-4 text-gray-500" />
-      <span className="font-medium">Adults:</span> {medicineData.dosage.adults}
-    </li>
-    <li className="flex items-center gap-2 mb-1">
-      <User className="w-4 h-4 text-blue-500" />
-      <span className="font-medium">Teens:</span> {medicineData.dosage.teens}
-    </li>
-    <li className="flex items-center gap-2 mb-1">
-      <User className="w-4 h-4 text-orange-500" />
-      <span className="font-medium">Children:</span> {medicineData.dosage.children}
-    </li>
-  </ul>
-</div>
-<hr className="my-4 border-gray-200" />
-<div className="mb-4">
-  <div className="flex items-center gap-2 mb-1">
-    <ArrowRight className="w-5 h-5 text-purple-500" />
-    <h2 className="font-semibold text-lg">How to Take</h2>
-  </div>
-  <p className="text-gray-700">{medicineData.administration}</p>
-</div>
-<hr className="my-4 border-gray-200" />
-<div className="mb-4">
-  <div className="flex items-center gap-2 mb-1">
-    <AlertTriangle className="w-5 h-5 text-yellow-500" />
-    <h2 className="font-semibold text-lg">Precautions</h2>
-  </div>
-  <ul className="text-gray-700 list-disc list-inside">
-    {medicineData.precautions.map((prec, idx) => (
-      <li key={idx}>{prec}</li>
-    ))}
-  </ul>
-</div>
-  <div className="flex gap-4 mt-6">
-    <button
-      onClick={handleAddToMedications}
-      className={`flex-1 ${isMedicationSaved ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors`}
-    >
-      {isMedicationSaved ? (
-        <>
-          <X className="w-5 h-5" />
-          <span>Unsave</span>
-        </>
-      ) : (
-        <>
-          <Plus className="w-5 h-5" />
-          <span>Add to My Medications</span>
-        </>
-      )}
-    </button>
-    <button
-      onClick={generateShareLink}
-      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors"
-    >
-      <Share2 className="w-5 h-5" />
-      <span>Share</span>
-    </button>
-  </div>
-</div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">{medicineData.name}</h1>
+            <p className="text-gray-600 mb-2">{medicineData.manufacturer}</p>
+            <div className="mb-4">
+              <span className="inline-block bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full font-semibold">{medicineData.category}</span>
+            </div>
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Info className="w-5 h-5 text-blue-500" />
+                <h2 className="font-semibold text-lg">Description</h2>
+              </div>
+              <p className="text-gray-700">{medicineData.description}</p>
+            </div>
+            <hr className="my-4 border-gray-200" />
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Search className="w-5 h-5 text-green-500" />
+                <h2 className="font-semibold text-lg">How It Works</h2>
+              </div>
+              <p className="text-gray-700">{medicineData.howItWorks}</p>
+            </div>
+            <hr className="my-4 border-gray-200" />
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Heart className="w-5 h-5 text-pink-500" />
+                <h2 className="font-semibold text-lg">Dosage</h2>
+              </div>
+              <ul className="text-gray-700 list-none ml-0">
+                <li className="flex items-center gap-2 mb-1">
+                  <User className="w-4 h-4 text-gray-500" />
+                  <span className="font-medium">Adults:</span> {medicineData.dosage.adults}
+                </li>
+                <li className="flex items-center gap-2 mb-1">
+                  <User className="w-4 h-4 text-blue-500" />
+                  <span className="font-medium">Teens:</span> {medicineData.dosage.teens}
+                </li>
+                <li className="flex items-center gap-2 mb-1">
+                  <User className="w-4 h-4 text-orange-500" />
+                  <span className="font-medium">Children:</span> {medicineData.dosage.children}
+                </li>
+              </ul>
+            </div>
+            <hr className="my-4 border-gray-200" />
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowRight className="w-5 h-5 text-purple-500" />
+                <h2 className="font-semibold text-lg">How to Take</h2>
+              </div>
+              <p className="text-gray-700">{medicineData.administration}</p>
+            </div>
+            <hr className="my-4 border-gray-200" />
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                <h2 className="font-semibold text-lg">Precautions</h2>
+              </div>
+              <ul className="text-gray-700 list-disc list-inside">
+                {medicineData.precautions.map((prec, idx) => (
+                  <li key={idx}>{prec}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex gap-4 mt-6">
+              {previousPage !== 'medications' && (
+                <button
+                  onClick={handleAddToMedications}
+                  className={`flex-1 ${isMedicationSaved ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors`}
+                >
+                  {isMedicationSaved ? (
+                    <>
+                      <X className="w-5 h-5" />
+                      <span>Unsave</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5" />
+                      <span>Add to My Medications</span>
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={generateShareLink}
+                className={`flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors ${previousPage === 'medications' ? 'w-full' : ''}`}
+              >
+                <Share2 className="w-5 h-5" />
+                <span>Share</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1045,40 +1037,49 @@ const MediScanApp = () => {
                     key={med.id} 
                     className="bg-white rounded-lg overflow-hidden shadow-sm"
                   >
-                    {/* Medication Image */}
-                    <div className="h-32 bg-gray-200 relative">
-                      {med.image_url ? (
-                        <img 
-                          src={med.image_url} 
-                          alt={med.medicine_name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Pill size={32} className="text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Medication Info */}
-                    <div className="p-3">
-                      <h3 className="font-semibold text-gray-900 truncate">{med.medicine_name}</h3>
-                      <p className="text-sm text-gray-600 truncate">{med.manufacturer}</p>
+                    {/* Clickable area for viewing medication details */}
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => viewMedicationDetails(med)}
+                    >
+                      {/* Medication Image */}
+                      <div className="h-32 bg-gray-200 relative">
+                        {med.image_url ? (
+                          <img 
+                            src={med.image_url} 
+                            alt={med.medicine_name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Pill size={32} className="text-gray-400" />
+                          </div>
+                        )}
+                      </div>
                       
-                      {/* Category Badge */}
-                      {med.medicine_data?.category && (
-                        <div className="mt-2">
-                          <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
-                            {med.medicine_data.category}
-                          </span>
-                        </div>
-                      )}
+                      {/* Medication Info */}
+                      <div className="p-3">
+                        <h3 className="font-semibold text-gray-900 truncate">{med.medicine_name}</h3>
+                        <p className="text-sm text-gray-600 truncate">{med.manufacturer}</p>
+                        
+                        {/* Category Badge */}
+                        {med.medicine_data?.category && (
+                          <div className="mt-2">
+                            <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
+                              {med.medicine_data.category}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     
                     {/* Remove Button */}
                     <div className="px-3 pb-3 flex justify-end">
                       <button
-                        onClick={() => removeMedicationFromList(med.id)}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the parent click
+                          removeMedicationFromList(med.id);
+                        }}
                         className="text-xs text-red-600 hover:text-red-800"
                       >
                         Remove
@@ -1248,33 +1249,8 @@ const MediScanApp = () => {
 
   // Scan History Page Component
   const ScanHistoryPage = () => {
-    const { user } = useAuth();
-
-    // Group scan history by date
-    const groupedHistory = scanHistory.reduce((groups, scan) => {
-      const date = new Date(scan.created_at).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-      
-      if (!groups[date]) {
-        groups[date] = [];
-      }
-      groups[date].push(scan);
-      return groups;
-    }, {});
-
-    const handleDeleteScan = async (scanId) => {
-      if (window.confirm('Are you sure you want to delete this scan?')) {
-        await deleteScanFromHistory(scanId);
-      }
-    };
-
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <button
             onClick={() => navigateTo('profile')}
@@ -1287,67 +1263,70 @@ const MediScanApp = () => {
         </div>
 
         <div className="p-6">
-          {Object.keys(groupedHistory).length === 0 ? (
+          {scanHistory.length === 0 ? (
             <div className="text-center py-12">
-              <History size={48} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500 mb-2">No scan history yet</p>
-              <p className="text-sm text-gray-400">Start scanning medicines to see your history here</p>
+              <Search size={48} className="mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">No scan history yet</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {Object.entries(groupedHistory).map(([date, scans]) => (
-                <div key={date}>
-                  <h2 className="text-lg font-semibold text-gray-900 mb-3">{date}</h2>
-                  <div className="space-y-3">
-                    {scans.map((scan) => (
-                      <div key={scan.id} className="bg-white rounded-lg p-4 shadow-sm flex items-center space-x-4">
-                        {/* Clickable area for viewing scan details */}
-                        <div 
-                          className="flex-1 flex items-center space-x-4 cursor-pointer"
-                          onClick={() => viewScanDetails(scan)}
-                        >
-                          {/* Medicine Image */}
-                          <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
-                            {scan.image_url ? (
-                              <img 
-                                src={scan.image_url} 
-                                alt={scan.medicine_name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Pill size={24} className="text-gray-400" />
-                            )}
-                          </div>
-                          
-                          {/* Medicine Info */}
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900">{scan.medicine_name}</h3>
-                            <p className="text-sm text-gray-600">{scan.manufacturer}</p>
-                            <p className="text-xs text-gray-400">
-                              {new Date(scan.created_at).toLocaleTimeString('en-US', {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </p>
-                          </div>
+            <>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Scans</h2>
+              <div className="space-y-4">
+                {scanHistory.map((scan) => (
+                  <div 
+                    key={scan.id} 
+                    className="bg-white rounded-lg overflow-hidden shadow-sm cursor-pointer"
+                  >
+                    {/* Clickable area for viewing scan details */}
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => viewScanDetails(scan)}
+                    >
+                      <div className="flex">
+                        {/* Scan Image */}
+                        <div className="w-24 h-24 bg-gray-200">
+                          {scan.image_url ? (
+                            <img
+                              src={scan.image_url}
+                              alt={scan.medicine_data.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Image size={24} className="text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Scan Info */}
+                        <div className="flex-1 p-4">
+                          <h3 className="font-semibold text-gray-900">{scan.medicine_data.name}</h3>
+                          <p className="text-sm text-gray-600">{new Date(scan.created_at).toLocaleString()}</p>
                         </div>
                         
                         {/* Delete Button */}
-                        <button
+                        <div 
+                          className="py-4 px-2 flex items-start"
                           onClick={(e) => {
                             e.stopPropagation(); // Prevent triggering the parent click
-                            handleDeleteScan(scan.id);
                           }}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         >
-                          <Trash2 size={16} />
-                        </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent triggering the parent click
+                              deleteScanFromHistory(scan.id);
+                            }}
+                            className="p-2 text-gray-400 hover:text-red-500"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
