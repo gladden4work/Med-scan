@@ -426,40 +426,27 @@ const MediScanApp = () => {
     }
   };
 
-  // Remove medication from user's list (soft delete)
+  // Remove medication from user's list (soft delete) using database function
   const removeMedicationFromList = async (medicationId) => {
     if (!user) return;
     
     try {
       console.log('Attempting to remove medication:', medicationId);
       
-      // First verify the medication belongs to the user
-      const { data: medData, error: fetchError } = await supabase
-        .from('user_medications')
-        .select('id')
-        .eq('id', medicationId)
-        .eq('user_id', user.id)
-        .single();
-      
-      if (fetchError) {
-        console.error('Error verifying medication ownership:', fetchError);
-        throw new Error('Could not verify medication ownership');
-      }
-      
-      if (!medData) {
-        console.error('Medication not found or not owned by user');
-        throw new Error('Medication not found or not owned by user');
-      }
-      
-      // Soft delete from Supabase by updating is_deleted flag
-      const { error } = await supabase
-        .from('user_medications')
-        .update({ is_deleted: true })
-        .eq('id', medicationId);
+      // Call the database function for soft delete
+      const { data, error } = await supabase
+        .rpc('soft_delete_medication', {
+          medication_id: medicationId
+        });
 
       if (error) {
         console.error('Supabase error:', error);
         throw error;
+      }
+      
+      if (!data) {
+        console.error('Failed to remove medication: may not belong to current user');
+        throw new Error('Failed to remove medication');
       }
       
       // Reload medications list to show only non-deleted items
@@ -472,40 +459,27 @@ const MediScanApp = () => {
     }
   };
   
-  // Delete scan from history (soft delete)
+  // Delete scan from history (soft delete) using database function
   const deleteScanFromHistory = async (scanId) => {
     if (!user) return;
     
     try {
       console.log('Attempting to remove scan history:', scanId);
       
-      // First verify the scan belongs to the user
-      const { data: scanData, error: fetchError } = await supabase
-        .from('scan_history')
-        .select('id')
-        .eq('id', scanId)
-        .eq('user_id', user.id)
-        .single();
-      
-      if (fetchError) {
-        console.error('Error verifying scan ownership:', fetchError);
-        throw new Error('Could not verify scan ownership');
-      }
-      
-      if (!scanData) {
-        console.error('Scan not found or not owned by user');
-        throw new Error('Scan not found or not owned by user');
-      }
-      
-      // Soft delete from Supabase by updating is_deleted flag
-      const { error } = await supabase
-        .from('scan_history')
-        .update({ is_deleted: true })
-        .eq('id', scanId);
+      // Call the database function for soft delete
+      const { data, error } = await supabase
+        .rpc('soft_delete_scan_history', {
+          scan_id: scanId
+        });
 
       if (error) {
         console.error('Supabase error:', error);
         throw error;
+      }
+      
+      if (!data) {
+        console.error('Failed to remove scan: may not belong to current user');
+        throw new Error('Failed to remove scan');
       }
       
       // Reload scan history to show only non-deleted items
