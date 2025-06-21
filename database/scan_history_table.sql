@@ -20,22 +20,22 @@ CREATE INDEX IF NOT EXISTS idx_scan_history_user_created ON scan_history(user_id
 -- Enable Row Level Security (RLS)
 ALTER TABLE scan_history ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies
+-- Create RLS policies with optimized subqueries for better performance
 -- Users can only see their own scan history
 CREATE POLICY "Users can view own scan history" ON scan_history
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (user_id IN (SELECT auth.uid()));
 
 -- Users can insert their own scan records
 CREATE POLICY "Users can insert own scan history" ON scan_history
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (user_id IN (SELECT auth.uid()));
 
 -- Users can delete their own scan records
 CREATE POLICY "Users can delete own scan history" ON scan_history
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE USING (user_id IN (SELECT auth.uid()));
 
 -- Users can update their own scan records
 CREATE POLICY "Users can update own scan history" ON scan_history
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (user_id IN (SELECT auth.uid()));
 
 -- Create updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at_column()
