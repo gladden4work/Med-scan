@@ -122,6 +122,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **RLS Policy Optimization**: When creating Row Level Security policies in Supabase, never use `auth.uid()` directly in the policy expression as it gets evaluated separately for each row during queries. Instead, use the subquery pattern `user_id IN (SELECT auth.uid())` which evaluates the function only once per query. This optimization is critical for maintaining performance as tables grow. The pattern should be used for all policy types (SELECT, INSERT, UPDATE, DELETE). Always remember to structure RLS policies for scalability from the beginning since they're hard to diagnose later.
 - **Component Reusability**: When designing UI components, always prioritize reusability and extensibility. Building components that can be adapted to multiple use cases (e.g., a shared results page for both scan history and medications) simplifies maintenance and ensures consistent UX.
 - **Soft Delete Strategy**: Implementing soft deletes (marking records as deleted rather than removing them) provides data recovery options and audit trails. Using an is_deleted flag and filtering queries is a simple approach that works well for most use cases, but also requires monitoring for database growth over time.
+- **RLS vs. Stored Functions**: When implementing data operations requiring specific security checks, PostgreSQL stored functions with `SECURITY DEFINER` are more reliable than Row Level Security (RLS) policies. While RLS is simpler to implement, it can become complex when handling UPDATE operations. Stored functions centralize security logic server-side, bypass RLS issues, and provide cleaner client code by reducing the need for multi-step operations (verify ownership, then update).
 
 ## Pending Development Tasks
 
@@ -175,6 +176,7 @@ Implement medication details view and soft delete functionality for both scan hi
 - `database/scan_history_table.sql`: SQL schema for the scan history table.
 - `database/user_medications_table.sql`: SQL schema for the user medications table.
 - `database/soft_delete_migration.sql`: SQL migration for adding soft delete functionality.
+- `database/soft_delete_functions.sql`: SQL functions for securely implementing soft delete operations.
 
 ## Task List
 
