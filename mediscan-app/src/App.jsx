@@ -433,12 +433,29 @@ const MediScanApp = () => {
     try {
       console.log('Attempting to remove medication:', medicationId);
       
+      // First verify the medication belongs to the user
+      const { data: medData, error: fetchError } = await supabase
+        .from('user_medications')
+        .select('id')
+        .eq('id', medicationId)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (fetchError) {
+        console.error('Error verifying medication ownership:', fetchError);
+        throw new Error('Could not verify medication ownership');
+      }
+      
+      if (!medData) {
+        console.error('Medication not found or not owned by user');
+        throw new Error('Medication not found or not owned by user');
+      }
+      
       // Soft delete from Supabase by updating is_deleted flag
       const { error } = await supabase
         .from('user_medications')
         .update({ is_deleted: true })
-        .eq('id', medicationId)
-        .eq('user_id', user.id); // Ensure we're only updating the user's own record
+        .eq('id', medicationId);
 
       if (error) {
         console.error('Supabase error:', error);
@@ -462,12 +479,29 @@ const MediScanApp = () => {
     try {
       console.log('Attempting to remove scan history:', scanId);
       
+      // First verify the scan belongs to the user
+      const { data: scanData, error: fetchError } = await supabase
+        .from('scan_history')
+        .select('id')
+        .eq('id', scanId)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (fetchError) {
+        console.error('Error verifying scan ownership:', fetchError);
+        throw new Error('Could not verify scan ownership');
+      }
+      
+      if (!scanData) {
+        console.error('Scan not found or not owned by user');
+        throw new Error('Scan not found or not owned by user');
+      }
+      
       // Soft delete from Supabase by updating is_deleted flag
       const { error } = await supabase
         .from('scan_history')
         .update({ is_deleted: true })
-        .eq('id', scanId)
-        .eq('user_id', user.id); // Ensure we're only updating the user's own record
+        .eq('id', scanId);
 
       if (error) {
         console.error('Supabase error:', error);
