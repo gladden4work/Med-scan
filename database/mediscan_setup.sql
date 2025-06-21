@@ -33,6 +33,17 @@ CREATE TABLE IF NOT EXISTS user_medications (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create follow_up_questions table for storing user questions about medications
+CREATE TABLE IF NOT EXISTS follow_up_questions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  scan_id UUID REFERENCES scan_history(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- =====================================================
 -- 2. INDEXES FOR PERFORMANCE
 -- =====================================================
@@ -49,6 +60,11 @@ CREATE INDEX IF NOT EXISTS idx_user_medications_created_at ON user_medications(c
 CREATE INDEX IF NOT EXISTS idx_user_medications_user_created ON user_medications(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_medications_not_deleted ON user_medications(is_deleted) WHERE is_deleted = false;
 
+-- Follow-up questions indexes
+CREATE INDEX IF NOT EXISTS idx_follow_up_questions_scan_id ON follow_up_questions(scan_id);
+CREATE INDEX IF NOT EXISTS idx_follow_up_questions_user_id ON follow_up_questions(user_id);
+CREATE INDEX IF NOT EXISTS idx_follow_up_questions_created_at ON follow_up_questions(created_at DESC);
+
 -- =====================================================
 -- 3. ROW LEVEL SECURITY (RLS) SETUP
 -- =====================================================
@@ -56,6 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_user_medications_not_deleted ON user_medications(
 -- Enable RLS on tables
 ALTER TABLE scan_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_medications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE follow_up_questions ENABLE ROW LEVEL SECURITY;
 
 -- Scan history policies
 DROP POLICY IF EXISTS "Users can view own scan history" ON scan_history;
@@ -93,6 +110,16 @@ CREATE POLICY "Users can update own medications" ON user_medications
 CREATE POLICY "Users can delete own medications" ON user_medications
   FOR DELETE USING (user_id IN (SELECT auth.uid()));
 
+-- Follow-up questions policies
+DROP POLICY IF EXISTS "Users can view own follow-up questions" ON follow_up_questions;
+DROP POLICY IF EXISTS "Users can insert own follow-up questions" ON follow_up_questions;
+
+CREATE POLICY "Users can view own follow-up questions" ON follow_up_questions
+  FOR SELECT USING (user_id IN (SELECT auth.uid()));
+
+CREATE POLICY "Users can insert own follow-up questions" ON follow_up_questions
+  FOR INSERT WITH CHECK (user_id IN (SELECT auth.uid()));
+
 -- =====================================================
 -- 4. TRIGGERS AND FUNCTIONS
 -- =====================================================
@@ -115,6 +142,11 @@ CREATE TRIGGER update_scan_history_updated_at
 DROP TRIGGER IF EXISTS update_user_medications_updated_at ON user_medications;
 CREATE TRIGGER update_user_medications_updated_at 
   BEFORE UPDATE ON user_medications 
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_follow_up_questions_updated_at ON follow_up_questions;
+CREATE TRIGGER update_follow_up_questions_updated_at 
+  BEFORE UPDATE ON follow_up_questions 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
@@ -188,6 +220,7 @@ $$;
 -- Grant necessary permissions
 GRANT ALL ON scan_history TO authenticated;
 GRANT ALL ON user_medications TO authenticated;
+GRANT ALL ON follow_up_questions TO authenticated;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT EXECUTE ON FUNCTION soft_delete_medication(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION soft_delete_scan_history(UUID) TO authenticated;
@@ -197,4 +230,5 @@ GRANT EXECUTE ON FUNCTION soft_delete_scan_history(UUID) TO authenticated;
 -- =====================================================
 
 ANALYZE scan_history;
-ANALYZE user_medications; 
+ANALYZE user_medications;
+ANALYZE follow_up_questions; 

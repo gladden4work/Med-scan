@@ -78,6 +78,13 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Loading State**: Added loading spinner during authentication check
 - **Consistent Navigation**: All navigation now uses consistent function calls for better state management
 
+### Follow-up Questions Feature - COMPLETED
+- **Interactive Q&A**: Added ability to ask follow-up questions about medications
+- **Real-time AI Answers**: Questions are answered by the same AI model used for medication identification
+- **Persistent Storage**: Questions and answers are saved to the database for logged-in users
+- **User Interface**: Clean, intuitive interface with loading states and error handling
+- **Contextual Answers**: AI responses are tailored to the specific medication being viewed
+
 ### My Medications Feature - IN PROGRESS
 - **Grid View UI**: Updating My Medications page to display medications in a responsive grid layout
 - **Supabase Integration**: Creating a user_medications table to persist saved medications
@@ -87,28 +94,26 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Soft Delete**: Implementing soft delete functionality for both scan history and medications
 
 #### Technical Implementation:
-1. **Database Schema**: Creating a user_medications table with RLS policies
-2. **Data Persistence**: Implementing CRUD operations for user medications
-3. **UI Enhancement**: Converting list view to grid view with medication cards
-4. **Toggle Functionality**: Adding logic to check if a medication exists and toggle its saved state
-5. **Visual Feedback**: Updating button text and style based on medication saved status
-6. **Shared Results Component**: Extending the ResultsPage component to display medication details
-7. **Soft Delete**: Adding is_deleted column to tables and updating queries to filter by it
+1. **Database Schema**: Created a follow_up_questions table with RLS policies
+2. **Backend API**: Added a new `/ask-follow-up` endpoint to handle follow-up questions
+3. **UI Component**: Implemented a question input with send button and answer display
+4. **Data Persistence**: Added functionality to save questions and answers to the database
+5. **Loading States**: Added visual feedback during question processing
+6. **Error Handling**: Implemented graceful error handling for failed requests
 
 ### File Changes:
-- **Modified**: `src/App.jsx` - Updated authentication flow, navigation system and scan history viewing functionality
-- **New**: `database/user_medications_table.sql` - SQL schema for the user_medications table
-- **Modified**: `database/scan_history_table.sql` - Added is_deleted column for soft delete
-- **New**: `database/soft_delete_migration.sql` - SQL migration for adding soft delete functionality
+- **New**: `database/follow_up_questions_table.sql` - SQL schema for the follow-up questions table
+- **Modified**: `backend/server.js` - Added endpoint for handling follow-up questions
+- **Modified**: `src/App.jsx` - Added UI components and logic for follow-up questions
+- **Modified**: `plan.md` - Updated project plan with new feature details
 
 ### Technical Implementation:
-- **Authentication Flow**: Replaced automatic redirect with `checkAuthAndNavigate` function that conditionally prompts for login
-- **Navigation Tracking**: Added `previousPage` state to remember navigation history
-- **Protected Routes**: Conditional checks for user authentication before accessing profile-related pages
-- **Scan Details Viewing**: New `viewScanDetails` function loads and displays past scan details
-- **UI Improvements**: Added cursor-pointer to scan items and improved clickable areas
-- **Reusable Components**: Extended ResultsPage to handle both scan history and medication details
-- **Soft Delete**: Modified delete operations to update is_deleted flag instead of removing records
+- **Question Input**: Added a form with text input and send button for follow-up questions
+- **Answer Display**: Created a dedicated section to display AI-generated answers
+- **API Integration**: Implemented fetch calls to the backend for question processing
+- **Database Storage**: Added functions to save questions and answers to Supabase
+- **User Experience**: Added loading indicators and disabled states during processing
+- **Contextual Prompting**: Enhanced AI prompts with medication context for better answers
 
 ## Lessons Learned
 - **Node.js Module Types**: When a Node.js backend server fails with module-related errors (`require is not defined` or `Cannot use import`), it's crucial to ensure consistency. The `backend/package.json` must include `"type": "module"` if the server code (`server.js`) uses ES Module `import` syntax. If it uses CommonJS `require()` syntax, `"type": "module"` must be removed. A mismatch between these two causes runtime errors.
@@ -124,6 +129,8 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Soft Delete Strategy**: Implementing soft deletes (marking records as deleted rather than removing them) provides data recovery options and audit trails. Using an is_deleted flag and filtering queries is a simple approach that works well for most use cases, but also requires monitoring for database growth over time.
 - **RLS vs. Stored Functions**: When implementing data operations requiring specific security checks, PostgreSQL stored functions with `SECURITY DEFINER` are more reliable than Row Level Security (RLS) policies. While RLS is simpler to implement, it can become complex when handling UPDATE operations. Stored functions centralize security logic server-side, bypass RLS issues, and provide cleaner client code by reducing the need for multi-step operations (verify ownership, then update).
 - **SQL Migration Consolidation**: When working with multiple SQL migration files that build upon each other, it's valuable to periodically consolidate them into a single comprehensive setup file. This approach simplifies onboarding for new developers, reduces the chance of migration errors, and provides a clear snapshot of the current database schema. By organizing the consolidated file into logical sections (tables, indexes, RLS policies, functions, etc.), it becomes both a setup script and documentation of the database structure.
+- **AI Context Enhancement**: When designing prompts for AI models, providing rich context about the specific domain (like medication details) significantly improves the quality and relevance of responses. Structuring prompts with clear instructions and comprehensive background information helps the AI generate more accurate and helpful answers.
+- **Form Submission UX**: For interactive features like follow-up questions, it's important to provide immediate visual feedback (loading indicators, disabled inputs) during processing to improve user experience. This prevents multiple submissions and reduces user confusion about whether their action was registered.
 
 ## Pending Development Tasks
 
@@ -137,6 +144,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [x] **My Medications Feature**: Implement grid view UI and save/unsave functionality
 - [x] **Medication Details View**: Make medication cards clickable to view full details
 - [x] **Soft Delete Implementation**: Add soft delete functionality to both scan history and medications
+- [x] **Follow-up Questions Feature**: Add ability to ask follow-up questions about medications
 - [ ] **Error Handling**: Improve error states and user feedback
 - [ ] **End-to-End Testing**: Verify scan history saves and displays correctly
 
