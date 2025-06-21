@@ -428,17 +428,25 @@ const MediScanApp = () => {
 
   // Remove medication from user's list (soft delete)
   const removeMedicationFromList = async (medicationId) => {
+    if (!user) return;
+    
     try {
+      console.log('Attempting to remove medication:', medicationId);
+      
       // Soft delete from Supabase by updating is_deleted flag
       const { error } = await supabase
         .from('user_medications')
         .update({ is_deleted: true })
-        .eq('id', medicationId);
+        .eq('id', medicationId)
+        .eq('user_id', user.id); // Ensure we're only updating the user's own record
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
       
       // Reload medications list to show only non-deleted items
-      loadUserMedications();
+      await loadUserMedications();
       
       console.log('Medication removed successfully');
     } catch (error) {
@@ -449,21 +457,25 @@ const MediScanApp = () => {
   
   // Delete scan from history (soft delete)
   const deleteScanFromHistory = async (scanId) => {
+    if (!user) return;
+    
     try {
+      console.log('Attempting to remove scan history:', scanId);
+      
       // Soft delete from Supabase by updating is_deleted flag
       const { error } = await supabase
         .from('scan_history')
-        .update({ 
-          is_deleted: true,
-          user_id: user.id // Explicitly include the user_id to satisfy RLS policy
-        })
+        .update({ is_deleted: true })
         .eq('id', scanId)
-        .eq('user_id', user.id); // Add this to ensure we're only updating the user's own records
-      
-      if (error) throw error;
+        .eq('user_id', user.id); // Ensure we're only updating the user's own record
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
       
       // Reload scan history to show only non-deleted items
-      loadScanHistory();
+      await loadScanHistory();
       
       console.log('Scan history removed successfully');
     } catch (error) {
