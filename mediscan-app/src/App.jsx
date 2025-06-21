@@ -6,8 +6,138 @@ import { useAuth } from './AuthContext.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
   Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
-  Star, Mail, Pill, History, CreditCard, LogOut, Trash2, Image
+  Star, Mail, Pill, History, CreditCard, LogOut, Trash2, Image, Send
 } from 'lucide-react';
+
+// Isolated Follow-up Question Component to prevent scroll issues
+const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
+  const [followUpQuestion, setFollowUpQuestion] = useState('');
+  const [followUpAnswer, setFollowUpAnswer] = useState('');
+  const [isLoadingAnswer, setIsLoadingAnswer] = useState(false);
+  
+  const handleInputChange = (e) => {
+    setFollowUpQuestion(e.target.value);
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!followUpQuestion.trim() || !medicineData) return;
+    
+    setIsLoadingAnswer(true);
+    setFollowUpAnswer('');
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/ask-follow-up`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: followUpQuestion,
+          medicineData,
+          userId: user?.id || null,
+          scanId: null
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get answer');
+      }
+
+      const { answer } = await response.json();
+      setFollowUpAnswer(answer);
+      
+      // Save the question and answer to the database if user is logged in
+      if (user) {
+        await saveFollowUpQuestion(followUpQuestion, answer);
+      }
+    } catch (error) {
+      console.error('Error getting follow-up answer:', error);
+      setFollowUpAnswer('Sorry, we could not process your question. Please try again.');
+    } finally {
+      setIsLoadingAnswer(false);
+    }
+  };
+  
+  const saveFollowUpQuestion = async (question, answer) => {
+    if (!user) return;
+    
+    try {
+      // Find the scan ID if it exists
+      const { data: scanData } = await supabase
+        .from('scan_history')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('medicine_name', medicineData.name)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      const scanId = scanData && scanData.length > 0 ? scanData[0].id : null;
+      
+      // Insert the follow-up question
+      const { error } = await supabase
+        .from('follow_up_questions')
+        .insert({
+          scan_id: scanId,
+          user_id: user.id,
+          question,
+          answer
+        });
+      
+      if (error) throw error;
+      
+    } catch (error) {
+      console.error('Error saving follow-up question:', error);
+    }
+  };
+  
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Search className="w-5 h-5 text-indigo-500" />
+        <h2 className="font-semibold text-lg">Ask a Follow-up Question</h2>
+      </div>
+      
+      <form onSubmit={handleSubmit} className="mb-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={followUpQuestion}
+            onChange={handleInputChange}
+            placeholder="Type a follow-up question"
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isLoadingAnswer}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
+          />
+          <button
+            type="submit"
+            disabled={isLoadingAnswer || !followUpQuestion.trim()}
+            className={`p-3 rounded-full ${isLoadingAnswer || !followUpQuestion.trim() ? 'bg-gray-300' : 'bg-black'} flex items-center justify-center`}
+          >
+            <Send className={`w-5 h-5 ${isLoadingAnswer || !followUpQuestion.trim() ? 'text-gray-500' : 'text-white'}`} />
+          </button>
+        </div>
+      </form>
+      
+      {isLoadingAnswer && (
+        <div className="flex items-center justify-center py-4">
+          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+          <span className="ml-2 text-gray-600">Getting answer...</span>
+        </div>
+      )}
+      
+      {followUpAnswer && (
+        <div className="bg-blue-50 p-4 rounded-xl">
+          <p className="text-gray-800">{followUpAnswer}</p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MediScanApp = () => {
   const { user, loading } = useAuth(); // Get user from AuthContext
@@ -249,58 +379,43 @@ const MediScanApp = () => {
             // Upload to Supabase Storage
             const { data: uploadData, error: uploadError } = await supabase.storage
               .from('scan-images')
-              .upload(fileName, blob, {
-                contentType: 'image/jpeg',
-                upsert: false
-              });
+              .upload(fileName, blob);
             
             if (uploadError) throw uploadError;
             
-            // Get the public URL for the uploaded image
+            // Get the public URL
             const { data: { publicUrl } } = supabase.storage
               .from('scan-images')
               .getPublicUrl(fileName);
-              
+            
             imageUrl = publicUrl;
-          } else {
-            // If it's already a URL, use it directly
-            imageUrl = capturedImage;
           }
         }
         
-        // Save medication to Supabase
-        const { error: saveError } = await supabase
+        // Insert into user_medications table
+        const { error } = await supabase
           .from('user_medications')
           .insert({
             user_id: user.id,
             medicine_name: medicineData.name,
-            manufacturer: medicineData.manufacturer || '',
+            manufacturer: medicineData.manufacturer,
             image_url: imageUrl,
-            medicine_data: medicineData,
-            is_deleted: false
+            medicine_data: medicineData
           });
         
-        if (saveError) throw saveError;
+        if (error) throw error;
         
         // Update state
         setIsMedicationSaved(true);
         console.log('Medication added to list');
       }
+      
+      // Refresh the medications list
+      loadUserMedications();
     } catch (error) {
-      console.error('Error managing medication:', error);
-      alert('Failed to save medication. Please try again.');
+      console.error('Error updating medications:', error);
     }
   };
-
-  // Check if current medicine is saved when medicineData changes
-  useEffect(() => {
-    if (medicineData && user) {
-      const exists = checkMedicationExists(medicineData.name);
-      setIsMedicationSaved(exists);
-    } else {
-      setIsMedicationSaved(false);
-    }
-  }, [medicineData, medications, user]);
 
   const generateShareLink = () => {
     const shareUrl = `https://mediscan.app/medicine/${medicineData.name.replace(/\s+/g, '-').toLowerCase()}`;
@@ -767,6 +882,16 @@ const MediScanApp = () => {
               <p className="text-gray-700">{medicineData.administration}</p>
             </div>
             <hr className="my-4 border-gray-200" />
+            
+            {/* Follow-up Question Section - Using isolated component */}
+            <FollowUpQuestionSection 
+              medicineData={medicineData} 
+              user={user} 
+              BACKEND_URL={BACKEND_URL} 
+            />
+            
+            <hr className="my-4 border-gray-200" />
+            
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-5 h-5 text-yellow-500" />
