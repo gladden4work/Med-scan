@@ -426,15 +426,40 @@ const MediScanApp = () => {
     }
   };
 
+  // Remove medication from user's list (soft delete)
+  const removeMedicationFromList = async (medicationId) => {
+    try {
+      // Soft delete from Supabase by updating is_deleted flag
+      const { error } = await supabase
+        .from('user_medications')
+        .update({ is_deleted: true })
+        .eq('id', medicationId);
+
+      if (error) throw error;
+      
+      // Reload medications list to show only non-deleted items
+      loadUserMedications();
+      
+      console.log('Medication removed successfully');
+    } catch (error) {
+      console.error('Error removing medication:', error);
+      alert('Failed to remove medication. Please try again.');
+    }
+  };
+  
   // Delete scan from history (soft delete)
   const deleteScanFromHistory = async (scanId) => {
     try {
       // Soft delete from Supabase by updating is_deleted flag
       const { error } = await supabase
         .from('scan_history')
-        .update({ is_deleted: true })
-        .eq('id', scanId);
-
+        .update({ 
+          is_deleted: true,
+          user_id: user.id // Explicitly include the user_id to satisfy RLS policy
+        })
+        .eq('id', scanId)
+        .eq('user_id', user.id); // Add this to ensure we're only updating the user's own records
+      
       if (error) throw error;
       
       // Reload scan history to show only non-deleted items

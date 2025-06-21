@@ -24,10 +24,20 @@ DROP POLICY IF EXISTS "Users can view own scan history" ON scan_history;
 CREATE POLICY "Users can view own scan history" ON scan_history
   FOR SELECT USING (user_id IN (SELECT auth.uid()) AND NOT is_deleted);
 
+-- Add UPDATE policy for scan_history
+DROP POLICY IF EXISTS "Users can update own scan history" ON scan_history;
+CREATE POLICY "Users can update own scan history" ON scan_history
+  FOR UPDATE USING (user_id IN (SELECT auth.uid()));
+
 -- Update user_medications policies
 DROP POLICY IF EXISTS "Users can view own medications" ON user_medications;
 CREATE POLICY "Users can view own medications" ON user_medications
   FOR SELECT USING (user_id IN (SELECT auth.uid()) AND NOT is_deleted);
+
+-- Add UPDATE policy for user_medications
+DROP POLICY IF EXISTS "Users can update own medications" ON user_medications;
+CREATE POLICY "Users can update own medications" ON user_medications
+  FOR UPDATE USING (user_id IN (SELECT auth.uid()));
 
 -- Admin policy for soft-deleted records (optional, uncomment if admin access is needed)
 -- CREATE POLICY "Admins can see all records including deleted" ON scan_history
