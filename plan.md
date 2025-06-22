@@ -24,9 +24,9 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - Backend optimizations: avoid duplicate queries (phash similarity), store uploaded images, handle "not a med" cases.
 
 ### Monetization
-- In-app purchases (limit free scans, upsell for more)
+- Tiered subscription plans (Free, Paid) with different feature entitlements
 - "Where to buy" links with UTM tracking
-- Potential for ads
+- Ad visibility based on subscription tier
 
 ## Requirements & Infrastructure
 
@@ -55,6 +55,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 | **Share links**      | Tokenized public URL, read-only DB access             |
 | **Scan limits**      | User ID-based tracking                               |
 | **Error logging**    | Cloudflare Logpush                                    |
+| **Subscription**     | Mobile platform payments (iOS/Google Play)           |
 
 ### Migration Strategy
 1. **Phase 1 (Current)**: Supabase for rapid development and feature completion
@@ -92,6 +93,13 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Button State**: Dynamically changing the "Add to My Medications" button to "Unsave" when a medication is already saved
 - **Clickable Medication Cards**: Making medication cards clickable to view full details
 - **Soft Delete**: Implementing soft delete functionality for both scan history and medications
+
+### Tiered Pricing and User Entitlement System - NEW
+- **Subscription Plans**: Implementing Free (not logged in), Free (logged in), and Paid subscription tiers
+- **Feature Entitlements**: Adding quota limits for scans, follow-up questions, history access, and saved medications
+- **User Experience**: Creating contextual upgrade prompts and quota displays
+- **Subscription Management**: Building a subscription page accessible from the profile
+- **Quota Enforcement**: Implementing checks to prevent usage beyond entitlement limits
 
 #### Technical Implementation:
 1. **Database Schema**: Created a follow_up_questions table with RLS policies
@@ -131,6 +139,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **SQL Migration Consolidation**: When working with multiple SQL migration files that build upon each other, it's valuable to periodically consolidate them into a single comprehensive setup file. This approach simplifies onboarding for new developers, reduces the chance of migration errors, and provides a clear snapshot of the current database schema. By organizing the consolidated file into logical sections (tables, indexes, RLS policies, functions, etc.), it becomes both a setup script and documentation of the database structure.
 - **AI Context Enhancement**: When designing prompts for AI models, providing rich context about the specific domain (like medication details) significantly improves the quality and relevance of responses. Structuring prompts with clear instructions and comprehensive background information helps the AI generate more accurate and helpful answers.
 - **Form Submission UX**: For interactive features like follow-up questions, it's important to provide immediate visual feedback (loading indicators, disabled inputs) during processing to improve user experience. This prevents multiple submissions and reduces user confusion about whether their action was registered.
+- **Subscription Management**: When implementing tiered plans, it's important to design for graceful downgrade handling. Users who downgrade should retain their higher-tier entitlements until the current subscription period ends, avoiding disruption to their experience.
 
 ## Pending Development Tasks
 
@@ -148,6 +157,16 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [ ] **Error Handling**: Improve error states and user feedback
 - [ ] **End-to-End Testing**: Verify scan history saves and displays correctly
 
+### Tiered Pricing & User Entitlements (New)
+- [ ] **Database Schema**: Create tables for plans, features, user plans, and usage tracking
+- [ ] **Subscription Page**: Build UI for viewing and managing subscription plans
+- [ ] **Quota Display**: Update Profile page to show scan limits instead of credit limit
+- [ ] **Entitlement Checks**: Add middleware to verify user entitlements before actions
+- [ ] **Usage Tracking**: Implement counters for scans, follow-up questions, etc.
+- [ ] **Upgrade Prompts**: Add contextual prompts when users reach quota limits
+- [ ] **Admin Controls**: Create admin interface for managing plan configurations
+- [ ] **Payment Integration**: Prepare for future iOS/Google Play payment integration
+
 ### Future Migration (Cloudflare Production)
 - [ ] **D1 Schema Design**: Convert Supabase tables to Cloudflare D1 schema
 - [ ] **Workers API**: Rewrite Express backend as Cloudflare Workers
@@ -161,9 +180,10 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [ ] **API Abstraction**: Create API layer that works with both web and mobile
 - [ ] **State Management**: Implement proper state management for mobile
 - [ ] **Image Handling**: Mobile camera integration and image processing
+- [ ] **Payment Processing**: Integrate with iOS/Google Play for subscription management
 
 ## Current Goal
-Implement medication details view and soft delete functionality for both scan history and medications.
+Implement tiered pricing and user entitlement system with subscription management.
 
 ## Engineering Project Plan
 
@@ -173,6 +193,7 @@ Implement medication details view and soft delete functionality for both scan hi
 - AI: Google Gemini 2.5 Flash via a secure backend proxy.
 - Core UI: Camera → Preview → Results, Profile, My Medications.
 - Dev Environment: Frontend (Vite) and Backend (Express) run concurrently.
+- Payment Processing: Will be integrated with iOS/Google Play in the future when mobile apps are developed.
 
 ## File Roles
 - `plan.md`: This document, outlining project goals and tasks.
@@ -186,6 +207,8 @@ Implement medication details view and soft delete functionality for both scan hi
 - `database/user_medications_table.sql`: SQL schema for the user medications table.
 - `database/soft_delete_migration.sql`: SQL migration for adding soft delete functionality.
 - `database/soft_delete_functions.sql`: SQL functions for securely implementing soft delete operations.
+- `database/plans_schema.sql`: SQL schema for subscription plans and entitlements.
+- `database/user_usage_tracking.sql`: SQL schema for tracking user feature usage.
 
 ## Task List
 
@@ -218,5 +241,11 @@ Implement medication details view and soft delete functionality for both scan hi
 - [ ] Persist medications list using Supabase.
 - [ ] Add unit & E2E tests; set up CI.
 
-## Current Goal
-Implement medication details view and soft delete functionality for both scan history and medications.
+### Phase 4: Tiered Pricing & Subscription
+- [ ] Create database schema for plans and entitlements
+- [ ] Update Profile page to show scan limits instead of credit limit
+- [ ] Create Subscription page accessible from Profile
+- [ ] Implement quota tracking and enforcement
+- [ ] Add contextual upgrade prompts
+- [ ] Build admin interface for plan management
+- [ ] Prepare for future payment processing integration
