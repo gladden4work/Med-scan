@@ -5,6 +5,7 @@ import { supabase } from './supabaseClient.js';
 import { useAuth } from './AuthContext.jsx';
 import { useSubscription } from './SubscriptionContext.jsx';
 import SubscriptionPage from './SubscriptionPage.jsx';
+import QuotaDisplay from './components/QuotaDisplay.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
   Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
@@ -759,6 +760,15 @@ const MediScanApp = () => {
             <h3 className="font-semibold text-lg">Confirm Photo</h3>
             <p className="text-white/70 text-sm">Is the image clear enough to analyze?</p>
         </div>
+        
+        {/* Quota display in a separate container */}
+        <div className="py-2 px-4 mb-5 flex justify-center">
+          <QuotaDisplay 
+            featureKey="scan_quota"
+            className="text-white/90"
+            navigateTo={navigateTo}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={() => {
@@ -1296,6 +1306,15 @@ const MediScanApp = () => {
               </div>
             </>
           )}
+          
+          {/* Quota display at the bottom */}
+          <div className="py-2 px-4 mt-6 flex justify-center">
+            <QuotaDisplay 
+              featureKey="medication_list"
+              className="text-gray-600"
+              navigateTo={navigateTo}
+            />
+          </div>
         </div>
       </div>
     );
@@ -1553,6 +1572,15 @@ const MediScanApp = () => {
               </div>
             </>
           )}
+          
+          {/* Quota display at the bottom */}
+          <div className="py-2 px-4 mt-6 flex justify-center">
+            <QuotaDisplay 
+              featureKey="history_access"
+              className="text-gray-600"
+              navigateTo={navigateTo}
+            />
+          </div>
         </div>
       </div>
     );
