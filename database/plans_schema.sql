@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS user_usage (
   UNIQUE(user_id, feature_key) -- One usage record per feature per user
 );
 
+-- Create admin_users table to track users with admin privileges
+CREATE TABLE IF NOT EXISTS admin_users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
 -- =====================================================
 -- 2. INDEXES FOR PERFORMANCE
 -- =====================================================
@@ -82,6 +90,9 @@ CREATE INDEX IF NOT EXISTS idx_user_usage_user_id ON user_usage(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_usage_feature_key ON user_usage(feature_key);
 CREATE INDEX IF NOT EXISTS idx_user_usage_last_reset ON user_usage(last_reset);
 
+-- Admin users index
+CREATE INDEX IF NOT EXISTS idx_admin_users_user_id ON admin_users(user_id);
+
 -- =====================================================
 -- 3. ROW LEVEL SECURITY (RLS) SETUP
 -- =====================================================
@@ -91,6 +102,7 @@ ALTER TABLE plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE plan_features ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 
 -- Plans policies (admin only for write, public for read)
 DROP POLICY IF EXISTS "Anyone can view active plans" ON plans;
@@ -131,6 +143,16 @@ CREATE POLICY "Users can view own usage" ON user_usage
 
 CREATE POLICY "System can update usage" ON user_usage
   FOR UPDATE USING (true);
+
+-- Admin users policies (only admins can view and modify)
+DROP POLICY IF EXISTS "Only admins can view admin users" ON admin_users;
+DROP POLICY IF EXISTS "Only admins can modify admin users" ON admin_users;
+
+CREATE POLICY "Only admins can view admin users" ON admin_users
+  FOR SELECT USING (auth.uid() IN (SELECT user_id FROM admin_users));
+
+CREATE POLICY "Only admins can modify admin users" ON admin_users
+  FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
 -- =====================================================
 -- 4. TRIGGERS AND FUNCTIONS
@@ -427,6 +449,7 @@ GRANT ALL ON plans TO authenticated;
 GRANT ALL ON plan_features TO authenticated;
 GRANT ALL ON user_plans TO authenticated;
 GRANT ALL ON user_usage TO authenticated;
+GRANT ALL ON admin_users TO authenticated;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT EXECUTE ON FUNCTION check_user_entitlement(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION increment_feature_usage(UUID, TEXT) TO authenticated;
@@ -439,4 +462,5 @@ GRANT EXECUTE ON FUNCTION get_user_quotas(UUID) TO authenticated;
 ANALYZE plans;
 ANALYZE plan_features;
 ANALYZE user_plans;
-ANALYZE user_usage; 
+ANALYZE user_usage;
+ANALYZE admin_users; 
