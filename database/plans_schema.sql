@@ -8,7 +8,7 @@
 -- Create plans table to store subscription plan configurations
 CREATE TABLE IF NOT EXISTS plans (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   description TEXT,
   price DECIMAL(10, 2) DEFAULT 0.00,
   billing_period TEXT DEFAULT 'monthly', -- monthly, yearly
