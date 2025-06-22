@@ -132,6 +132,9 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **Default Data**: Set up initial plans and features with appropriate limits
 
 ## Lessons Learned
+
+- **Consistent Quota Display Pattern**: Creating a reusable component for quota displays (QuotaDisplay) ensures consistent UI across the application while reducing code duplication. This pattern makes it easy to update the display logic in one place and have it reflected throughout the app. The component handles different user states (anonymous, free, premium) and provides appropriate calls-to-action based on the context.
+- **Strategic UI Element Placement**: Positioning UI elements like quota displays at strategic points in the user flow (e.g., before action buttons on the Preview page and at the bottom of list pages) improves user awareness without disrupting the main content. This placement ensures users are informed about their usage limits at decision points where they might need to take action.
 - **Node.js Module Types**: When a Node.js backend server fails with module-related errors (`require is not defined` or `Cannot use import`), it's crucial to ensure consistency. The `backend/package.json` must include `"type": "module"` if the server code (`server.js`) uses ES Module `import` syntax. If it uses CommonJS `require()` syntax, `"type": "module"` must be removed. A mismatch between these two causes runtime errors.
 - **Supabase Auth Integration**: Adding authentication with Supabase is fast, but requires careful handling of environment variables. The frontend `.env` needs the correct `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (never commit these long-term). Sign-up flow requires email confirmation by default; users must check their inbox to activate their account. The React context/provider pattern is effective for global auth state. Always test both Google and email/password flows.
 - **Monorepo/Script Management**: After flattening the repo and removing the submodule, the root `package.json` (and the `dev:all` script) was lost. Now, frontend and backend must be started in separate terminals (`npm run dev` in `mediscan-app`, `npm run start` in `backend`). If you want a single command, you must recreate a root `package.json` with a script like `concurrently`.
@@ -171,6 +174,8 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [x] **Entitlement Checks**: Add middleware to verify user entitlements before actions
 - [x] **Usage Tracking**: Implement counters for scans, follow-up questions, etc.
 - [x] **Upgrade Prompts**: Add contextual prompts when users reach quota limits
+- [x] **Enhanced Quota Display UI**: Added consistent quota display with upgrade/login prompts across all pages
+- [x] **UI Positioning Refinement**: Optimized placement of quota displays on Preview, Scan History, and My Medications pages
 - [ ] **Error Handling**: Improve error states and user feedback
 - [ ] **End-to-End Testing**: Verify scan history saves and displays correctly
 
@@ -197,7 +202,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [ ] **Payment Processing**: Integrate with iOS/Google Play for subscription management
 
 ## Current Goal
-Improve error handling and end-to-end testing for the tiered pricing and user entitlement system.
+Enhance user experience with clear quota displays and upgrade prompts, while improving error handling and end-to-end testing for the tiered pricing and user entitlement system.
 
 ## Engineering Project Plan
 
@@ -210,6 +215,7 @@ Improve error handling and end-to-end testing for the tiered pricing and user en
 - Payment Processing: Will be integrated with iOS/Google Play in the future when mobile apps are developed.
 
 ## File Roles
+- `components/QuotaDisplay.jsx`: Reusable component for displaying feature quotas with conditional login/upgrade buttons based on user status.
 - `plan.md`: This document, outlining project goals and tasks.
 - `backend/server.js`: The Express backend server that proxies requests to the Google AI API, keeping the API key secure.
 - `backend/.env`: Stores the secret `GOOGLE_API_KEY`.
@@ -224,8 +230,9 @@ Improve error handling and end-to-end testing for the tiered pricing and user en
 - `database/plans_schema.sql`: SQL schema for subscription plans and entitlements.
 - `database/user_usage_tracking.sql`: SQL schema for tracking user feature usage.
 - `database/mediscan_setup.sql`: Consolidated database setup file with all tables, functions, and policies.
-- `src/SubscriptionContext.jsx`: React context for managing subscription state.
+- `src/SubscriptionContext.jsx`: React context for managing subscription state and feature entitlements.
 - `src/SubscriptionPage.jsx`: UI for viewing and managing subscription plans.
+- `components/QuotaDisplay.test.jsx`: Test suite for the QuotaDisplay component covering all user scenarios.
 
 ## Task List
 

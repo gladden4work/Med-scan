@@ -317,6 +317,12 @@ export const SubscriptionProvider = ({ children }) => {
     return Math.max(0, feature.limit - feature.used);
   };
   
+  // Get total quota limit for a feature
+  const getQuotaLimit = (featureKey) => {
+    const feature = entitlements[featureKey];
+    return feature ? feature.limit : 0;
+  };
+  
   // Check if ads should be shown
   const shouldShowAds = () => {
     const adsFeature = entitlements.ads_enabled;
@@ -346,6 +352,7 @@ export const SubscriptionProvider = ({ children }) => {
         cancelSubscription,
         formatQuotaDisplay,
         getRemainingQuota,
+        getQuotaLimit,
         shouldShowAds,
         getRefreshPeriodText
       }}
