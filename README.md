@@ -9,7 +9,9 @@ MediScan is a modern web application that helps users identify medicines by taki
 - **Medicine Details:** Comprehensive information including name, manufacturer, usage, dosage, and precautions
 - **Personal Medication Tracker:** Save and manage your medications list
 - **Scan History Management:** Automatic saving and organized viewing of all medicine scans with delete functionality
-- **User Profile Management:** Complete profile page with credit tracking, medication history, and app settings
+- **Follow-up Questions:** Ask specific questions about your medications and get AI-powered answers
+- **Tiered Subscription Plans:** Free and Premium tiers with different feature entitlements
+- **User Profile Management:** Complete profile page with quota tracking, medication history, and app settings
 - **Secure Sign-Out:** Clean session termination with state reset
 - **Platform-Aware App Rating:** Automatically detects iOS/Android and redirects to appropriate app store
 - **Direct Contact Support:** Built-in email integration for user feedback and support
@@ -84,18 +86,19 @@ VITE_BACKEND_URL=http://localhost:3001
 ```
 
 ### 3. Database Setup (Supabase)
-Run the SQL migration to create the scan history table:
+Run the SQL migration to create the necessary tables:
 
 1. Go to your Supabase project dashboard
 2. Navigate to SQL Editor
-3. Copy and paste the contents of `database/scan_history_table.sql`
-4. Execute the query to create the table and set up Row Level Security
+3. Copy and paste the contents of `database/mediscan_setup.sql`
+4. Execute the query to create all tables and set up Row Level Security
 
-This creates a `scan_history` table with:
+This creates all necessary tables with:
 - User-specific scan records with RLS policies
 - Automatic timestamps and UUID primary keys
 - JSONB storage for complete medicine analysis data
 - Optimized indexes for performance
+- Tiered subscription plans and feature entitlements
 - Cloudflare D1 compatibility for future migration
 
 ### 4. Supabase Storage Setup (Required for Image Storage)
@@ -130,11 +133,12 @@ MediScan v2 uses **passwordless authentication** for enhanced security:
 - **Results Page:** Detailed medicine information display
 - **Profile Page:** User account management and app settings
 - **My Medications:** Personal medication tracking and history
+- **Subscription Page:** View and manage subscription plans
 - **Authentication:** Passwordless login with Google OAuth or Email OTP
 
 ### Profile Features
 - **User Information:** Display name and email with profile picture placeholder
-- **Credit System:** Shows daily credit limit (1,714) with refresh schedule
+- **Quota System:** Shows daily scan limits and other feature entitlements based on subscription
 - **Medication Management:** 
   - Quick access to "My Medication" saved list
   - "Scan History" for viewing and managing all previous scans
@@ -150,6 +154,31 @@ MediScan v2 uses **passwordless authentication** for enhanced security:
 - **Account Management:**
   - Secure sign-out with complete state reset
 
+## Subscription Plans
+
+MediScan offers three subscription tiers:
+
+### Free (Not Logged In)
+- **Scan Quota:** 3 scans per day
+- **Follow-up Questions:** 1 question per day
+- **History Access:** Not available
+- **Medication List:** Not available
+
+### Free (Logged In)
+- **Scan Quota:** 10 scans per day
+- **Follow-up Questions:** 5 questions per day
+- **History Access:** 30 days
+- **Medication List:** Up to 5 medications
+
+### Premium
+- **Scan Quota:** Unlimited
+- **Follow-up Questions:** Unlimited
+- **History Access:** Unlimited
+- **Medication List:** Unlimited
+- **Price:** $9.99/month
+
+Each feature has quota tracking with appropriate reset periods (daily/monthly/none).
+
 ## Project Structure
 
 ```
@@ -162,9 +191,14 @@ Med-scan/
 │   ├── src/
 │   │   ├── App.jsx         # Main app component with routing
 │   │   ├── AuthContext.jsx # Supabase authentication context
+│   │   ├── SubscriptionContext.jsx # Subscription management context
 │   │   └── supabaseClient.js # Supabase configuration
 │   ├── .env.example        # Frontend environment template
 │   └── package.json        # Frontend dependencies
+├── database/               # Database setup and migrations
+│   ├── mediscan_setup.sql  # Consolidated database setup
+│   ├── plans_schema.sql    # Subscription plans schema
+│   └── user_usage_tracking.sql # Usage tracking functions
 ├── package.json            # Root package with unified scripts
 └── README.md              # This file
 ```
@@ -235,6 +269,19 @@ Remember to:
   - Detailed medication view with complete information
   - Soft delete functionality (records marked as hidden rather than removed)
 
+- **Follow-up Questions**:
+  - Ask specific questions about your medications
+  - Get AI-powered answers tailored to the specific medication
+  - Questions and answers saved to your history
+  - Intuitive interface with loading states and error handling
+
+- **Tiered Subscription System**:
+  - Three subscription plans with different feature entitlements
+  - Quota tracking for scans, follow-up questions, history access, and medication lists
+  - Profile page showing scan limits instead of credit limit
+  - Contextual upgrade prompts when users reach quota limits
+  - Graceful downgrade handling for subscriptions
+
 ### 🔧 Technical Improvements
 - **Navigation Architecture**: Added `navigateTo` and `checkAuthAndNavigate` functions for better state management
 - **History State Management**: Implemented tracking of previous page for improved navigation paths
@@ -244,6 +291,10 @@ Remember to:
 - **Soft Delete Implementation**: Used PostgreSQL stored functions with `SECURITY DEFINER` privileges to handle soft deletes securely
 - **Shared Components**: Extended the ResultsPage component to handle both scan history and medication details views
 - **Database Optimization**: Added is_deleted flag with appropriate indexes for efficient filtering of active records
+- **Subscription Management**: Implemented tiered pricing with feature entitlements and quota tracking
+- **Usage Tracking**: Added PostgreSQL functions for tracking and resetting feature usage
+- **Entitlement Checks**: Created middleware to verify user entitlements before actions
+- **Admin Access**: Added admin_users table and RLS policies for managing admin privileges
 
 ### 🚀 Current Status
 - ✅ Frontend running on http://localhost:5175/
@@ -256,18 +307,29 @@ Remember to:
 - ✅ Profile management with secure sign-out
 - ✅ My Medications with grid view and soft delete
 - ✅ Shared medication and scan details view
-
-The application now provides a more intuitive user experience with improved navigation flows and interactive features.
+- ✅ Follow-up questions with AI-powered answers
+- ✅ Tiered subscription plans with feature entitlements
+- ✅ Quota tracking for all features
 
 ## Database Structure
 
 ### Tables
 - **scan_history**: Stores user scan records with soft delete capability
 - **user_medications**: Stores user saved medications with soft delete capability
+- **follow_up_questions**: Stores user questions about medications
+- **plans**: Stores subscription plan configurations
+- **plan_features**: Stores feature entitlements for each plan
+- **user_plans**: Tracks user subscriptions
+- **user_usage**: Tracks feature usage
+- **admin_users**: Tracks users with admin privileges
 
 ### Database Functions
 - **soft_delete_scan_history**: Securely handles soft deletion of scan history records
 - **soft_delete_medication**: Securely handles soft deletion of medication records
+- **check_user_entitlement**: Checks if a user has entitlement for a feature
+- **increment_feature_usage**: Increments usage for a feature
+- **get_user_quotas**: Gets all quotas for a user
+- **subscribe_user_to_plan**: Subscribes a user to a plan
 
 These functions use `SECURITY DEFINER` privileges to bypass RLS issues while maintaining proper permission checks.
 
@@ -309,7 +371,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Pending Setup Tasks
 
 ### Immediate (Required for Full Functionality)
-1. **Database Migration**: Run `database/scan_history_table.sql` in Supabase SQL Editor
+1. **Database Migration**: Run `database/mediscan_setup.sql` in Supabase SQL Editor
 2. **Environment Variables**: Ensure all `.env` files are properly configured
 3. **Google AI API**: Verify API key is working in backend
 

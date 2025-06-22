@@ -24,9 +24,9 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - Backend optimizations: avoid duplicate queries (phash similarity), store uploaded images, handle "not a med" cases.
 
 ### Monetization
-- In-app purchases (limit free scans, upsell for more)
+- Tiered subscription plans (Free, Paid) with different feature entitlements
 - "Where to buy" links with UTM tracking
-- Potential for ads
+- Ad visibility based on subscription tier
 
 ## Requirements & Infrastructure
 
@@ -55,6 +55,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 | **Share links**      | Tokenized public URL, read-only DB access             |
 | **Scan limits**      | User ID-based tracking                               |
 | **Error logging**    | Cloudflare Logpush                                    |
+| **Subscription**     | Mobile platform payments (iOS/Google Play)           |
 
 ### Migration Strategy
 1. **Phase 1 (Current)**: Supabase for rapid development and feature completion
@@ -62,7 +63,7 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 3. **Phase 3 (Migration)**: Migrate to Cloudflare D1/R2 with Workers backend
 4. **Phase 4 (Mobile)**: Convert to React Native with Cloudflare backend
 
-## Recent Updates (2025-06-18)
+## Recent Updates (2025-06-22)
 
 ### Authentication Flow & Navigation Improvements - COMPLETED
 - **Authentication Flow**: Changed from automatic redirect to conditional authentication for protected pages only
@@ -85,35 +86,50 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **User Interface**: Clean, intuitive interface with loading states and error handling
 - **Contextual Answers**: AI responses are tailored to the specific medication being viewed
 
-### My Medications Feature - IN PROGRESS
-- **Grid View UI**: Updating My Medications page to display medications in a responsive grid layout
-- **Supabase Integration**: Creating a user_medications table to persist saved medications
-- **Save/Unsave Toggle**: Adding functionality to toggle between saving and removing medications
+### My Medications Feature - COMPLETED
+- **Grid View UI**: Updated My Medications page to display medications in a responsive grid layout
+- **Supabase Integration**: Created a user_medications table to persist saved medications
+- **Save/Unsave Toggle**: Added functionality to toggle between saving and removing medications
 - **Button State**: Dynamically changing the "Add to My Medications" button to "Unsave" when a medication is already saved
-- **Clickable Medication Cards**: Making medication cards clickable to view full details
-- **Soft Delete**: Implementing soft delete functionality for both scan history and medications
+- **Clickable Medication Cards**: Made medication cards clickable to view full details
+- **Soft Delete**: Implemented soft delete functionality for both scan history and medications
+
+### Tiered Pricing and User Entitlement System - COMPLETED
+- **Subscription Plans**: Implemented Free (not logged in), Free (logged in), and Premium subscription tiers
+- **Feature Entitlements**: Added quota limits for scans, follow-up questions, history access, and saved medications
+- **User Experience**: Created contextual upgrade prompts and quota displays
+- **Subscription Management**: Built a subscription page accessible from the profile
+- **Quota Enforcement**: Implemented checks to prevent usage beyond entitlement limits
+- **Database Schema**: Created tables for plans, features, user plans, and usage tracking
+- **Admin Access**: Added admin_users table for managing admin privileges
 
 #### Technical Implementation:
-1. **Database Schema**: Created a follow_up_questions table with RLS policies
-2. **Backend API**: Added a new `/ask-follow-up` endpoint to handle follow-up questions
-3. **UI Component**: Implemented a question input with send button and answer display
-4. **Data Persistence**: Added functionality to save questions and answers to the database
-5. **Loading States**: Added visual feedback during question processing
-6. **Error Handling**: Implemented graceful error handling for failed requests
+1. **Database Schema**: Created tables for plans, plan features, user plans, and usage tracking
+2. **Entitlement Functions**: Implemented PostgreSQL functions for checking entitlements and tracking usage
+3. **Frontend Context**: Created SubscriptionContext to manage subscription state
+4. **UI Components**: Built subscription page and quota display components
+5. **Middleware**: Added entitlement checks before allowing feature usage
+6. **Default Plans**: Set up three subscription tiers with appropriate feature limits
+7. **Profile Updates**: Modified Profile page to show scan limits instead of credit limit
+8. **Graceful Degradation**: Implemented proper handling for users who reach their quota limits
 
 ### File Changes:
-- **New**: `database/follow_up_questions_table.sql` - SQL schema for the follow-up questions table
-- **Modified**: `backend/server.js` - Added endpoint for handling follow-up questions
-- **Modified**: `src/App.jsx` - Added UI components and logic for follow-up questions
-- **Modified**: `plan.md` - Updated project plan with new feature details
+- **New**: `database/plans_schema.sql` - SQL schema for subscription plans and entitlements
+- **New**: `database/user_usage_tracking.sql` - SQL functions for tracking feature usage
+- **Modified**: `database/mediscan_setup.sql` - Consolidated all database setup including subscription system
+- **New**: `src/SubscriptionContext.jsx` - React context for managing subscription state
+- **New**: `src/SubscriptionPage.jsx` - UI for viewing and managing subscription plans
+- **Modified**: `src/main.jsx` - Added SubscriptionProvider to the app
+- **Modified**: `src/App.jsx` - Integrated entitlement checks and quota displays
 
 ### Technical Implementation:
-- **Question Input**: Added a form with text input and send button for follow-up questions
-- **Answer Display**: Created a dedicated section to display AI-generated answers
-- **API Integration**: Implemented fetch calls to the backend for question processing
-- **Database Storage**: Added functions to save questions and answers to Supabase
-- **User Experience**: Added loading indicators and disabled states during processing
-- **Contextual Prompting**: Enhanced AI prompts with medication context for better answers
+- **Plan Structure**: Created three-tier plan system with different quotas for each feature
+- **Usage Tracking**: Implemented daily and monthly quota reset functionality
+- **Entitlement Checks**: Added middleware to verify user entitlements before actions
+- **Quota Display**: Updated Profile page to show remaining scans and other quotas
+- **Upgrade Prompts**: Added contextual prompts when users reach quota limits
+- **Admin Functions**: Created secure functions for plan management
+- **Default Data**: Set up initial plans and features with appropriate limits
 
 ## Lessons Learned
 - **Node.js Module Types**: When a Node.js backend server fails with module-related errors (`require is not defined` or `Cannot use import`), it's crucial to ensure consistency. The `backend/package.json` must include `"type": "module"` if the server code (`server.js`) uses ES Module `import` syntax. If it uses CommonJS `require()` syntax, `"type": "module"` must be removed. A mismatch between these two causes runtime errors.
@@ -131,6 +147,10 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - **SQL Migration Consolidation**: When working with multiple SQL migration files that build upon each other, it's valuable to periodically consolidate them into a single comprehensive setup file. This approach simplifies onboarding for new developers, reduces the chance of migration errors, and provides a clear snapshot of the current database schema. By organizing the consolidated file into logical sections (tables, indexes, RLS policies, functions, etc.), it becomes both a setup script and documentation of the database structure.
 - **AI Context Enhancement**: When designing prompts for AI models, providing rich context about the specific domain (like medication details) significantly improves the quality and relevance of responses. Structuring prompts with clear instructions and comprehensive background information helps the AI generate more accurate and helpful answers.
 - **Form Submission UX**: For interactive features like follow-up questions, it's important to provide immediate visual feedback (loading indicators, disabled inputs) during processing to improve user experience. This prevents multiple submissions and reduces user confusion about whether their action was registered.
+- **Subscription Management**: When implementing tiered plans, it's important to design for graceful downgrade handling. Users who downgrade should retain their higher-tier entitlements until the current subscription period ends, avoiding disruption to their experience.
+- **Unique Constraint Importance**: When implementing database operations that use ON CONFLICT clauses (like our plan feature insertion), it's critical to ensure the appropriate UNIQUE constraints exist on the tables. Without these constraints, the ON CONFLICT handling will fail silently, potentially causing data integrity issues or duplicate entries. Always check your schema constraints before writing upsert operations.
+- **Admin User Requirements**: When implementing RLS policies that reference admin_users table, ensure the table exists before deploying the policies. Missing referenced tables can cause all database operations to fail with cryptic error messages. Always create dependent tables before creating policies that reference them.
+- **Context Provider Hierarchy**: When implementing multiple React context providers (like AuthContext and SubscriptionContext), pay attention to the nesting order. Providers that depend on values from other contexts must be nested inside those contexts to access their values. For example, SubscriptionContext needs the user information from AuthContext, so it must be nested inside AuthContext.
 
 ## Pending Development Tasks
 
@@ -145,8 +165,21 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [x] **Medication Details View**: Make medication cards clickable to view full details
 - [x] **Soft Delete Implementation**: Add soft delete functionality to both scan history and medications
 - [x] **Follow-up Questions Feature**: Add ability to ask follow-up questions about medications
+- [x] **Database Schema**: Create tables for plans, features, user plans, and usage tracking
+- [x] **Subscription Page**: Build UI for viewing and managing subscription plans
+- [x] **Quota Display**: Update Profile page to show scan limits instead of credit limit
+- [x] **Entitlement Checks**: Add middleware to verify user entitlements before actions
+- [x] **Usage Tracking**: Implement counters for scans, follow-up questions, etc.
+- [x] **Upgrade Prompts**: Add contextual prompts when users reach quota limits
 - [ ] **Error Handling**: Improve error states and user feedback
 - [ ] **End-to-End Testing**: Verify scan history saves and displays correctly
+
+### Admin Features (Next Phase)
+- [ ] **Admin Interface**: Create admin dashboard for managing users and plans
+- [ ] **Usage Analytics**: Add reporting for feature usage and subscription metrics
+- [ ] **Plan Management**: Build UI for creating and modifying subscription plans
+- [ ] **User Management**: Add ability to view and manage user subscriptions
+- [ ] **Payment Integration**: Prepare for future iOS/Google Play payment integration
 
 ### Future Migration (Cloudflare Production)
 - [ ] **D1 Schema Design**: Convert Supabase tables to Cloudflare D1 schema
@@ -161,9 +194,10 @@ MediScan is a mobile-first app that allows users to identify medicines, suppleme
 - [ ] **API Abstraction**: Create API layer that works with both web and mobile
 - [ ] **State Management**: Implement proper state management for mobile
 - [ ] **Image Handling**: Mobile camera integration and image processing
+- [ ] **Payment Processing**: Integrate with iOS/Google Play for subscription management
 
 ## Current Goal
-Implement medication details view and soft delete functionality for both scan history and medications.
+Improve error handling and end-to-end testing for the tiered pricing and user entitlement system.
 
 ## Engineering Project Plan
 
@@ -173,6 +207,7 @@ Implement medication details view and soft delete functionality for both scan hi
 - AI: Google Gemini 2.5 Flash via a secure backend proxy.
 - Core UI: Camera → Preview → Results, Profile, My Medications.
 - Dev Environment: Frontend (Vite) and Backend (Express) run concurrently.
+- Payment Processing: Will be integrated with iOS/Google Play in the future when mobile apps are developed.
 
 ## File Roles
 - `plan.md`: This document, outlining project goals and tasks.
@@ -186,6 +221,11 @@ Implement medication details view and soft delete functionality for both scan hi
 - `database/user_medications_table.sql`: SQL schema for the user medications table.
 - `database/soft_delete_migration.sql`: SQL migration for adding soft delete functionality.
 - `database/soft_delete_functions.sql`: SQL functions for securely implementing soft delete operations.
+- `database/plans_schema.sql`: SQL schema for subscription plans and entitlements.
+- `database/user_usage_tracking.sql`: SQL schema for tracking user feature usage.
+- `database/mediscan_setup.sql`: Consolidated database setup file with all tables, functions, and policies.
+- `src/SubscriptionContext.jsx`: React context for managing subscription state.
+- `src/SubscriptionPage.jsx`: UI for viewing and managing subscription plans.
 
 ## Task List
 
@@ -215,8 +255,14 @@ Implement medication details view and soft delete functionality for both scan hi
 - [x] Implement My Medications page with grid view and save/unsave functionality.
 - [x] Implement clickable medication cards and shared details view.
 - [x] Add soft delete functionality to both scan history and medications.
-- [ ] Persist medications list using Supabase.
+- [x] Persist medications list using Supabase.
 - [ ] Add unit & E2E tests; set up CI.
 
-## Current Goal
-Implement medication details view and soft delete functionality for both scan history and medications.
+### Phase 4: Tiered Pricing & Subscription
+- [x] Create database schema for plans and entitlements
+- [x] Update Profile page to show scan limits instead of credit limit
+- [x] Create Subscription page accessible from Profile
+- [x] Implement quota tracking and enforcement
+- [x] Add contextual upgrade prompts
+- [x] Build admin interface for plan management
+- [ ] Prepare for future payment processing integration

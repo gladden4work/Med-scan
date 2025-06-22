@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from './supabaseClient.js';
 import { useAuth } from './AuthContext.jsx';
+import { useSubscription } from './SubscriptionContext.jsx';
+import SubscriptionPage from './SubscriptionPage.jsx';
 import {
   Camera, Upload, Search, ArrowRight, Share2, ShoppingCart, Plus,
   Check, AlertTriangle, User, Heart, X, ChevronLeft, Info, Lock, 
@@ -11,9 +13,11 @@ import {
 
 // Isolated Follow-up Question Component to prevent scroll issues
 const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
+  const { checkEntitlement, incrementUsage, getRemainingQuota } = useSubscription();
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isLoadingAnswer, setIsLoadingAnswer] = useState(false);
+  const [entitlementError, setEntitlementError] = useState(null);
   
   const handleInputChange = (e) => {
     setFollowUpQuestion(e.target.value);
@@ -24,8 +28,17 @@ const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
     
     if (!followUpQuestion.trim() || !medicineData) return;
     
+    // Check if user has follow-up question entitlement
+    const hasEntitlement = await checkEntitlement('followup_questions');
+    
+    if (!hasEntitlement) {
+      setEntitlementError('You have reached your daily limit for follow-up questions. Please upgrade your plan for more questions.');
+      return;
+    }
+    
     setIsLoadingAnswer(true);
     setFollowUpAnswer('');
+    setEntitlementError(null);
     
     try {
       const response = await fetch(`${BACKEND_URL}/ask-follow-up`, {
@@ -52,6 +65,10 @@ const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
       if (user) {
         await saveFollowUpQuestion(followUpQuestion, answer);
       }
+      
+      // Increment follow-up question usage
+      await incrementUsage('followup_questions');
+      
     } catch (error) {
       console.error('Error getting follow-up answer:', error);
       setFollowUpAnswer('Sorry, we could not process your question. Please try again.');
@@ -98,7 +115,17 @@ const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
       <div className="flex items-center gap-2 mb-3">
         <Search className="w-5 h-5 text-indigo-500" />
         <h2 className="font-semibold text-lg">Ask a Follow-up Question</h2>
+        <span className="text-xs text-gray-500 ml-auto">
+          {getRemainingQuota('followup_questions')} remaining today
+        </span>
       </div>
+      
+      {entitlementError && (
+        <div className="mb-4 p-3 bg-yellow-50 text-yellow-700 rounded-lg flex items-center">
+          <AlertTriangle size={16} className="mr-2 flex-shrink-0" />
+          <p className="text-sm">{entitlementError}</p>
+        </div>
+      )}
       
       <form onSubmit={handleSubmit} className="mb-4">
         <div className="flex gap-2">
@@ -108,17 +135,25 @@ const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
             onChange={handleInputChange}
             placeholder="Type a follow-up question"
             className="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isLoadingAnswer}
+            disabled={isLoadingAnswer || entitlementError}
             autoComplete="off"
             autoCorrect="off"
             spellCheck="false"
           />
           <button
             type="submit"
-            disabled={isLoadingAnswer || !followUpQuestion.trim()}
-            className={`p-3 rounded-full ${isLoadingAnswer || !followUpQuestion.trim() ? 'bg-gray-300' : 'bg-black'} flex items-center justify-center`}
+            disabled={isLoadingAnswer || !followUpQuestion.trim() || entitlementError}
+            className={`p-3 rounded-full ${
+              isLoadingAnswer || !followUpQuestion.trim() || entitlementError
+                ? 'bg-gray-300'
+                : 'bg-black'
+            } flex items-center justify-center`}
           >
-            <Send className={`w-5 h-5 ${isLoadingAnswer || !followUpQuestion.trim() ? 'text-gray-500' : 'text-white'}`} />
+            <Send className={`w-5 h-5 ${
+              isLoadingAnswer || !followUpQuestion.trim() || entitlementError
+                ? 'text-gray-500'
+                : 'text-white'
+            }`} />
           </button>
         </div>
       </form>
@@ -140,7 +175,14 @@ const FollowUpQuestionSection = ({ medicineData, user, BACKEND_URL }) => {
 };
 
 const MediScanApp = () => {
-  const { user, loading } = useAuth(); // Get user from AuthContext
+  const { user, loading: authLoading } = useAuth(); // Get user from AuthContext
+  const { 
+    checkEntitlement, 
+    incrementUsage, 
+    formatQuotaDisplay,
+    getRemainingQuota
+  } = useSubscription();
+  
   const [currentPage, setCurrentPage] = useState('camera');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -151,6 +193,7 @@ const MediScanApp = () => {
   const fileInputRef = useRef(null);
   const [previousPage, setPreviousPage] = useState(null); // Track previous page for navigation
   const [isMedicationSaved, setIsMedicationSaved] = useState(false); // Track if current medicine is saved
+  const [entitlementError, setEntitlementError] = useState(null); // Track entitlement errors
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -163,13 +206,14 @@ const MediScanApp = () => {
     // Reset captured image when navigating back to camera from a non-preview page
     if (page === 'camera' && currentPage !== 'preview') {
       setCapturedImage(null);
+      setEntitlementError(null); // Clear any entitlement errors
     }
   };
 
   // Check authentication for protected pages
   const checkAuthAndNavigate = (page) => {
     // If trying to access a protected page without being logged in
-    if (!user && (page === 'profile' || page === 'scan-history' || page === 'medications')) {
+    if (!user && (page === 'profile' || page === 'scan-history' || page === 'medications' || page === 'subscription')) {
       navigateTo('auth');
     } else {
       navigateTo(page);
@@ -178,13 +222,14 @@ const MediScanApp = () => {
 
   // Check if trying to access protected pages while not logged in
   useEffect(() => {
-    if (!loading && !user && 
+    if (!authLoading && !user && 
         (currentPage === 'profile' || 
          currentPage === 'scan-history' || 
-         currentPage === 'medications')) {
+         currentPage === 'medications' ||
+         currentPage === 'subscription')) {
       navigateTo('auth');
     }
-  }, [user, loading, currentPage]);
+  }, [user, authLoading, currentPage]);
 
   // Load scan history when user is authenticated
   useEffect(() => {
@@ -234,8 +279,20 @@ const MediScanApp = () => {
   };
 
   const analyzeMedicine = async (imageData) => {
+    // Check if user has scan quota entitlement
+    const hasScanEntitlement = await checkEntitlement('scan_quota');
+    
+    if (!hasScanEntitlement) {
+      setEntitlementError({
+        type: 'scan_quota',
+        message: 'You have reached your scan limit. Please upgrade your plan for more scans.'
+      });
+      return;
+    }
+    
     setIsAnalyzing(true);
     setCurrentPage('results');
+    setEntitlementError(null);
 
     try {
       const response = await fetch(`${BACKEND_URL}/analyze`, {
@@ -250,16 +307,22 @@ const MediScanApp = () => {
         throw new Error('Failed to analyze medicine');
       }
 
-      const result = await response.json();
-      setMedicineData(result);
-      
-      // Automatically save successful scans to history
-      if (result && user) {
-        await saveScanToHistory(result, imageData);
+      const medicineInfo = await response.json();
+      setMedicineData(medicineInfo);
+
+      // Save scan to history if user is logged in
+      if (user) {
+        await saveScanToHistory(medicineInfo, imageData);
+        await checkIfMedicationSaved();
       }
+      
+      // Increment scan quota usage
+      await incrementUsage('scan_quota');
+      
     } catch (error) {
       console.error('Error analyzing medicine:', error);
-      setMedicineData(null);
+      alert('Failed to analyze medicine. Please try again.');
+      navigateTo('camera');
     } finally {
       setIsAnalyzing(false);
     }
@@ -607,97 +670,70 @@ const MediScanApp = () => {
     }
   };
 
-  // Camera Page Component
+  // Camera Page Component with entitlement check
   const CameraPage = () => (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">MediScan</h1>
+        <div className="w-10"></div>
+        <h1 className="text-xl font-semibold">MediScan</h1>
         <button
           onClick={() => checkAuthAndNavigate('profile')}
-          className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+          className="p-2 rounded-full hover:bg-gray-100 transition-colors"
         >
-          <User className="w-5 h-5 text-gray-600" />
+          <User size={24} />
         </button>
       </div>
 
       {/* Main Content */}
-      <div className="px-6 py-8">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">
-            Identify Your Medicine
-          </h2>
-          <p className="text-gray-600 text-lg">
-            Take a photo or upload an image to get detailed information
-          </p>
-        </div>
-
-        {/* Main Camera UI */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6">
-          {!capturedImage ? (
-            <div className="w-full max-w-md">
-              <div className="bg-gray-900 rounded-2xl aspect-square flex items-center justify-center mb-6">
-                <div className="text-center text-gray-400">
-                  <Camera size={48} className="mx-auto mb-2" />
-                  <p className="text-sm">Camera preview will appear here</p>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <button
-                  onClick={handleImageCapture}
-                  className="w-full bg-blue-600 text-white py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors"
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        {entitlementError && (
+          <div className="mb-6 p-4 bg-yellow-50 text-yellow-700 rounded-lg max-w-md mx-auto">
+            <div className="flex items-start">
+              <AlertTriangle size={20} className="mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium mb-2">Scan Limit Reached</p>
+                <p className="text-sm">{entitlementError.message}</p>
+                <button 
+                  onClick={() => checkAuthAndNavigate('subscription')}
+                  className="mt-3 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg"
                 >
-                  <Camera size={20} />
-                  Take Photo
-                </button>
-                
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full bg-gray-200 text-gray-800 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-gray-300 transition-colors"
-                >
-                  <Upload size={20} />
-                  Upload Image
+                  Upgrade Plan
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="w-full max-w-md">
-              <div className="bg-white rounded-2xl p-4 mb-6">
-                <img
-                  src={capturedImage}
-                  alt="Captured medicine"
-                  className="w-full h-64 object-cover rounded-lg mb-4"
-                />
-                
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setCapturedImage(null)}
-                    className="flex-1 bg-gray-200 text-gray-800 py-3 px-4 rounded-lg font-medium hover:bg-gray-300 transition-colors"
-                  >
-                    Retake
-                  </button>
-                  <button
-                    onClick={() => analyzeMedicine(capturedImage)}
-                    disabled={isAnalyzing}
-                    className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <Search size={16} />
-                        Analyze
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
+        )}
+        
+        <div className="bg-white rounded-xl shadow-sm p-6 w-full max-w-md text-center">
+          <h2 className="text-xl font-semibold mb-4">Identify Your Medicine</h2>
+          <p className="text-gray-600 mb-6">Take a clear photo of your medicine to get detailed information</p>
+          
+          <div className="flex flex-col space-y-4">
+            <button
+              onClick={handleImageCapture}
+              className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              <Camera size={20} />
+              <span>Take Photo</span>
+            </button>
+            
+            <button
+              onClick={handleImageCapture}
+              className="flex items-center justify-center space-x-2 bg-gray-100 text-gray-700 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              <Upload size={20} />
+              <span>Upload Image</span>
+            </button>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -1268,6 +1304,11 @@ const MediScanApp = () => {
   // Profile Page Component
   const ProfilePage = () => {
     const { user } = useAuth();
+    const { 
+      formatQuotaDisplay, 
+      getRefreshPeriodText,
+      currentPlan 
+    } = useSubscription();
     
     const handleRateApp = () => {
       // Detect platform and redirect to appropriate store
@@ -1334,17 +1375,25 @@ const MediScanApp = () => {
             </div>
           </div>
 
-          {/* Credit Limit Card */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+          {/* Scan Limit Card (previously Credit Limit) */}
+          <button 
+            onClick={() => navigateTo('subscription')}
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white"
+          >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm">Credit Limit</p>
-                <p className="text-2xl font-bold">1,714</p>
-                <p className="text-blue-100 text-xs">Daily credits refresh at 08:00 every day</p>
+                <p className="text-blue-100 text-sm">Scan Limit</p>
+                <p className="text-2xl font-bold">{formatQuotaDisplay('scan_quota')}</p>
+                <p className="text-blue-100 text-xs">{getRefreshPeriodText('scan_quota')}</p>
               </div>
               <CreditCard size={32} className="text-blue-200" />
             </div>
-          </div>
+            <div className="mt-3 bg-blue-500 bg-opacity-30 rounded-lg py-2 px-3 text-center">
+              <p className="text-sm text-white">
+                {currentPlan?.price > 0 ? 'Manage Subscription' : 'Upgrade for More Scans'}
+              </p>
+            </div>
+          </button>
 
           {/* Medication Section */}
           <div className="bg-white rounded-xl p-6 shadow-sm">
@@ -1358,7 +1407,10 @@ const MediScanApp = () => {
                   <Pill size={20} className="text-blue-600" />
                   <span className="font-medium">My Medication</span>
                 </div>
-                <ArrowRight size={16} className="text-gray-400" />
+                <div className="flex items-center">
+                  <span className="text-xs text-gray-500 mr-2">{formatQuotaDisplay('medication_list')} items</span>
+                  <ArrowRight size={16} className="text-gray-400" />
+                </div>
               </button>
               
               <button
@@ -1369,7 +1421,10 @@ const MediScanApp = () => {
                   <History size={20} className="text-green-600" />
                   <span className="font-medium">Scan History</span>
                 </div>
-                <ArrowRight size={16} className="text-gray-400" />
+                <div className="flex items-center">
+                  <span className="text-xs text-gray-500 mr-2">{formatQuotaDisplay('history_access')} scans</span>
+                  <ArrowRight size={16} className="text-gray-400" />
+                </div>
               </button>
             </div>
           </div>
@@ -1514,7 +1569,7 @@ const MediScanApp = () => {
         className="hidden"
       />
       
-      {loading ? (
+      {authLoading ? (
         // Show loading state while checking authentication
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
@@ -1540,6 +1595,8 @@ const MediScanApp = () => {
               return <ProfilePage />;
             case 'scan-history':
               return <ScanHistoryPage />;
+            case 'subscription':
+              return <SubscriptionPage navigateTo={navigateTo} />;
             default:
               return <CameraPage />;
           }
