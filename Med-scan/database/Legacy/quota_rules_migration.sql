@@ -106,35 +106,7 @@ ALTER TABLE scan_history ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT tru
 CREATE INDEX IF NOT EXISTS idx_scan_history_visibility ON scan_history(user_id, is_visible, created_at DESC);
 
 -- =====================================================
--- 3. RUN INITIAL VISIBILITY UPDATE FOR ALL USERS
--- =====================================================
-
--- Create temporary function to update all users' scan history visibility
-CREATE OR REPLACE FUNCTION update_all_users_scan_history_visibility()
-RETURNS INTEGER
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_user record;
-  v_count INTEGER := 0;
-BEGIN
-  FOR v_user IN SELECT DISTINCT user_id FROM scan_history LOOP
-    PERFORM update_scan_history_visibility(v_user.user_id);
-    v_count := v_count + 1;
-  END LOOP;
-  
-  RETURN v_count;
-END;
-$$;
-
--- Run the update for all users
-SELECT update_all_users_scan_history_visibility();
-
--- Drop the temporary function
-DROP FUNCTION update_all_users_scan_history_visibility();
-
--- =====================================================
--- 4. APPLY SCAN HISTORY VISIBILITY SQL
+-- 3. APPLY SCAN HISTORY VISIBILITY SQL
 -- =====================================================
 
 -- Function to update scan history visibility based on user's plan limit
@@ -194,6 +166,34 @@ BEGIN
   RETURN v_updated_count;
 END;
 $$;
+
+-- =====================================================
+-- 4. RUN INITIAL VISIBILITY UPDATE FOR ALL USERS
+-- =====================================================
+
+-- Create temporary function to update all users' scan history visibility
+CREATE OR REPLACE FUNCTION update_all_users_scan_history_visibility()
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_user record;
+  v_count INTEGER := 0;
+BEGIN
+  FOR v_user IN SELECT DISTINCT user_id FROM scan_history LOOP
+    PERFORM update_scan_history_visibility(v_user.user_id);
+    v_count := v_count + 1;
+  END LOOP;
+  
+  RETURN v_count;
+END;
+$$;
+
+-- Run the update for all users
+SELECT update_all_users_scan_history_visibility();
+
+-- Drop the temporary function
+DROP FUNCTION update_all_users_scan_history_visibility();
 
 -- Function to be called when a new scan is added
 CREATE OR REPLACE FUNCTION handle_new_scan_history()

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS scan_history (
   image_url TEXT,
   medicine_data JSONB, -- Store full medicine analysis data
   is_deleted BOOLEAN DEFAULT false,
+  is_visible BOOLEAN DEFAULT true, -- Controls visibility based on plan limits
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -62,7 +63,8 @@ CREATE TABLE IF NOT EXISTS plans (
 CREATE TABLE IF NOT EXISTS plan_features (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   plan_id UUID NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-  feature_key TEXT NOT NULL, -- scan_quota, followup_questions, history_access, medication_list, ads_enabled
+  feature_key TEXT NOT NULL, -- scan_quota, followup_questions, history_access, medication_list, ads_enabled,
+                             -- failed_scan_limit_daily, my_medication_limit, scan_history_limit
   value INTEGER, -- Numeric value for the feature limit
   refresh_period TEXT, -- daily, monthly, none (for unlimited)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -115,6 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_scan_history_user_id ON scan_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_scan_history_created_at ON scan_history(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_history_user_created ON scan_history(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_history_not_deleted ON scan_history(is_deleted) WHERE is_deleted = false;
+CREATE INDEX IF NOT EXISTS idx_scan_history_visibility ON scan_history(user_id, is_visible, created_at DESC);
 
 -- User medications indexes
 CREATE INDEX IF NOT EXISTS idx_user_medications_user_id ON user_medications(user_id);
@@ -170,7 +173,7 @@ DROP POLICY IF EXISTS "Users can update own scan history" ON scan_history;
 DROP POLICY IF EXISTS "Users can delete own scan history" ON scan_history;
 
 CREATE POLICY "Users can view own scan history" ON scan_history
-  FOR SELECT USING (user_id IN (SELECT auth.uid()) AND NOT is_deleted);
+  FOR SELECT USING (user_id IN (SELECT auth.uid()) AND is_visible = true);
 
 CREATE POLICY "Users can insert own scan history" ON scan_history
   FOR INSERT WITH CHECK (user_id IN (SELECT auth.uid()));
@@ -573,62 +576,361 @@ END;
 $$;
 
 -- =====================================================
--- 7. SUBSCRIPTION MANAGEMENT FUNCTIONS
+-- 7. SCAN HISTORY VISIBILITY FUNCTIONS
 -- =====================================================
 
--- Function to subscribe a user to a plan
-CREATE OR REPLACE FUNCTION subscribe_user_to_plan(
-  p_user_id UUID,
-  p_plan_name TEXT,
-  p_payment_provider TEXT DEFAULT NULL,
-  p_payment_reference TEXT DEFAULT NULL,
-  p_end_date TIMESTAMP WITH TIME ZONE DEFAULT NULL
+-- Function to update scan history visibility based on user's plan limit
+CREATE OR REPLACE FUNCTION update_scan_history_visibility(
+  p_user_id UUID
 )
-RETURNS UUID
+RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_plan_id UUID;
-  v_subscription_id UUID;
+  v_history_limit INTEGER;
+  v_updated_count INTEGER;
 BEGIN
-  -- Get the plan ID
-  SELECT id INTO v_plan_id
-  FROM plans
-  WHERE name = p_plan_name AND is_active = true;
+  -- Get user's scan history limit from their plan
+  SELECT 
+    COALESCE(pf.value, 3) -- Default to 3 if no specific limit is set
+  INTO 
+    v_history_limit
+  FROM user_plans up
+  JOIN plans p ON up.plan_id = p.id
+  JOIN plan_features pf ON p.id = pf.plan_id
+  WHERE up.user_id = p_user_id
+    AND up.is_active = true
+    AND pf.feature_key = 'scan_history_limit';
   
-  IF v_plan_id IS NULL THEN
-    RAISE EXCEPTION 'Plan "%" not found or not active', p_plan_name;
+  -- If no active plan found, use the default free plan limit
+  IF v_history_limit IS NULL THEN
+    SELECT 
+      COALESCE(pf.value, 3) -- Default to 3 if no specific limit is set
+    INTO 
+      v_history_limit
+    FROM plans p
+    JOIN plan_features pf ON p.id = pf.plan_id
+    WHERE p.name = 'Free (Logged In)' 
+      AND pf.feature_key = 'scan_history_limit';
   END IF;
   
-  -- Deactivate any existing subscription
-  UPDATE user_plans
-  SET is_active = FALSE, updated_at = NOW()
-  WHERE user_id = p_user_id AND is_active = TRUE;
+  -- Set all scan history entries to visible first
+  UPDATE scan_history
+  SET is_visible = true
+  WHERE user_id = p_user_id;
   
-  -- Create new subscription
-  INSERT INTO user_plans (
-    user_id, 
-    plan_id, 
-    start_date, 
-    end_date, 
-    is_active, 
-    payment_provider, 
-    payment_reference
-  )
-  VALUES (
-    p_user_id, 
-    v_plan_id, 
-    NOW(), 
-    p_end_date, 
-    TRUE, 
-    p_payment_provider, 
-    p_payment_reference
-  )
-  RETURNING id INTO v_subscription_id;
+  -- Then hide entries beyond the limit
+  UPDATE scan_history
+  SET is_visible = false
+  WHERE id IN (
+    SELECT id
+    FROM scan_history
+    WHERE user_id = p_user_id
+    ORDER BY created_at DESC
+    OFFSET v_history_limit
+  );
   
-  RETURN v_subscription_id;
+  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+  RETURN v_updated_count;
+END;
+$$;
+
+-- Function to be called when a new scan is added
+CREATE OR REPLACE FUNCTION handle_new_scan_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Update visibility for the user who added the scan
+  PERFORM update_scan_history_visibility(NEW.user_id);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to run after inserting new scan history
+DROP TRIGGER IF EXISTS trigger_new_scan_history ON scan_history;
+CREATE TRIGGER trigger_new_scan_history
+  AFTER INSERT ON scan_history
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_new_scan_history();
+
+-- Function to be called when a scan is deleted
+CREATE OR REPLACE FUNCTION handle_deleted_scan_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Update visibility for the user who deleted the scan
+  PERFORM update_scan_history_visibility(OLD.user_id);
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to run after deleting scan history
+DROP TRIGGER IF EXISTS trigger_deleted_scan_history ON scan_history;
+CREATE TRIGGER trigger_deleted_scan_history
+  AFTER DELETE ON scan_history
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_deleted_scan_history();
+
+-- Function to run once to update all users' scan history visibility
+CREATE OR REPLACE FUNCTION update_all_users_scan_history_visibility()
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_user record;
+  v_count INTEGER := 0;
+BEGIN
+  FOR v_user IN SELECT DISTINCT user_id FROM scan_history LOOP
+    PERFORM update_scan_history_visibility(v_user.user_id);
+    v_count := v_count + 1;
+  END LOOP;
+  
+  RETURN v_count;
+END;
+$$;
+
+-- =====================================================
+-- 8. USAGE TRACKING FUNCTIONS
+-- =====================================================
+
+-- Function to track failed scan (when AI returns "Not available" or "More than one medication")
+CREATE OR REPLACE FUNCTION increment_failed_scan_usage(
+  p_user_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_limit INTEGER;
+  v_usage INTEGER;
+  v_refresh_period TEXT;
+  v_last_reset TIMESTAMP WITH TIME ZONE;
+  v_now TIMESTAMP WITH TIME ZONE := NOW();
+BEGIN
+  -- Handle anonymous users (not logged in)
+  IF p_user_id IS NULL THEN
+    -- Anonymous users don't have failed scan tracking
+    RETURN TRUE;
+  END IF;
+
+  -- Get user's failed scan limit from their plan
+  SELECT 
+    pf.value, 
+    pf.refresh_period
+  INTO 
+    v_limit, 
+    v_refresh_period
+  FROM user_plans up
+  JOIN plans p ON up.plan_id = p.id
+  JOIN plan_features pf ON p.id = pf.plan_id
+  WHERE up.user_id = p_user_id
+    AND up.is_active = true
+    AND pf.feature_key = 'failed_scan_limit_daily';
+  
+  -- If no plan found, use the default free plan
+  IF v_limit IS NULL THEN
+    SELECT 
+      pf.value, 
+      pf.refresh_period
+    INTO 
+      v_limit, 
+      v_refresh_period
+    FROM plans p
+    JOIN plan_features pf ON p.id = pf.plan_id
+    WHERE p.name = 'Free (Logged In)'
+      AND pf.feature_key = 'failed_scan_limit_daily';
+  END IF;
+  
+  -- Default values if still null
+  v_limit := COALESCE(v_limit, 3);
+  v_refresh_period := COALESCE(v_refresh_period, 'daily');
+  
+  -- Get current usage
+  SELECT 
+    usage_count, 
+    last_reset
+  INTO 
+    v_usage, 
+    v_last_reset
+  FROM user_usage
+  WHERE user_id = p_user_id
+    AND feature_key = 'failed_scan_limit_daily';
+  
+  -- If no usage record exists, create one
+  IF v_usage IS NULL THEN
+    INSERT INTO user_usage (
+      user_id, 
+      feature_key, 
+      usage_count, 
+      last_reset
+    )
+    VALUES (
+      p_user_id, 
+      'failed_scan_limit_daily', 
+      0, 
+      v_now
+    );
+    
+    v_usage := 0;
+    v_last_reset := v_now;
+  END IF;
+  
+  -- Check if usage should be reset based on refresh period
+  IF v_refresh_period = 'daily' AND v_last_reset::date < v_now::date THEN
+    -- Reset daily usage
+    UPDATE user_usage
+    SET usage_count = 0, last_reset = v_now
+    WHERE user_id = p_user_id
+      AND feature_key = 'failed_scan_limit_daily';
+    
+    v_usage := 0;
+  ELSIF v_refresh_period = 'monthly' AND 
+        (EXTRACT(MONTH FROM v_last_reset) != EXTRACT(MONTH FROM v_now)
+         OR EXTRACT(YEAR FROM v_last_reset) != EXTRACT(YEAR FROM v_now)) THEN
+    -- Reset monthly usage
+    UPDATE user_usage
+    SET usage_count = 0, last_reset = v_now
+    WHERE user_id = p_user_id
+      AND feature_key = 'failed_scan_limit_daily';
+    
+    v_usage := 0;
+  END IF;
+  
+  -- Check if user has reached their limit
+  IF v_usage >= v_limit THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Increment usage
+  UPDATE user_usage
+  SET usage_count = usage_count + 1, updated_at = v_now
+  WHERE user_id = p_user_id
+    AND feature_key = 'failed_scan_limit_daily';
+  
+  RETURN TRUE;
+END;
+$$;
+
+-- Function to check if user can add more medications to their list
+CREATE OR REPLACE FUNCTION check_medication_limit(
+  p_user_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_limit INTEGER;
+  v_count INTEGER;
+BEGIN
+  -- Handle anonymous users (not logged in)
+  IF p_user_id IS NULL THEN
+    -- Anonymous users can't save medications
+    RETURN FALSE;
+  END IF;
+
+  -- Get user's medication limit from their plan
+  SELECT 
+    pf.value
+  INTO 
+    v_limit
+  FROM user_plans up
+  JOIN plans p ON up.plan_id = p.id
+  JOIN plan_features pf ON p.id = pf.plan_id
+  WHERE up.user_id = p_user_id
+    AND up.is_active = true
+    AND pf.feature_key = 'my_medication_limit';
+  
+  -- If no plan found, use the default free plan
+  IF v_limit IS NULL THEN
+    SELECT 
+      pf.value
+    INTO 
+      v_limit
+    FROM plans p
+    JOIN plan_features pf ON p.id = pf.plan_id
+    WHERE p.name = 'Free (Logged In)'
+      AND pf.feature_key = 'my_medication_limit';
+  END IF;
+  
+  -- Default value if still null
+  v_limit := COALESCE(v_limit, 3);
+  
+  -- Count user's current medications
+  SELECT 
+    COUNT(*)
+  INTO 
+    v_count
+  FROM user_medications
+  WHERE user_id = p_user_id;
+  
+  -- Check if user has reached their limit
+  RETURN v_count < v_limit;
+END;
+$$;
+
+-- Function to get user's medication count and limit
+CREATE OR REPLACE FUNCTION get_medication_count_and_limit(
+  p_user_id UUID
+)
+RETURNS TABLE (
+  current_count INTEGER,
+  limit_value INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_limit INTEGER;
+  v_count INTEGER;
+BEGIN
+  -- Handle anonymous users (not logged in)
+  IF p_user_id IS NULL THEN
+    -- Anonymous users can't save medications
+    RETURN QUERY SELECT 0::INTEGER, 0::INTEGER;
+    RETURN;
+  END IF;
+
+  -- Get user's medication limit from their plan
+  SELECT 
+    pf.value
+  INTO 
+    v_limit
+  FROM user_plans up
+  JOIN plans p ON up.plan_id = p.id
+  JOIN plan_features pf ON p.id = pf.plan_id
+  WHERE up.user_id = p_user_id
+    AND up.is_active = true
+    AND pf.feature_key = 'my_medication_limit';
+  
+  -- If no plan found, use the default free plan
+  IF v_limit IS NULL THEN
+    SELECT 
+      pf.value
+    INTO 
+      v_limit
+    FROM plans p
+    JOIN plan_features pf ON p.id = pf.plan_id
+    WHERE p.name = 'Free (Logged In)'
+      AND pf.feature_key = 'my_medication_limit';
+  END IF;
+  
+  -- Default value if still null
+  v_limit := COALESCE(v_limit, 3);
+  
+  -- Count user's current medications
+  SELECT 
+    COUNT(*)
+  INTO 
+    v_count
+  FROM user_medications
+  WHERE user_id = p_user_id;
+  
+  RETURN QUERY SELECT v_count::INTEGER, v_limit::INTEGER;
 END;
 $$;
 
@@ -657,20 +959,29 @@ SELECT
     WHEN p.name = 'Free (Not Logged In)' AND feature_key = 'followup_questions' THEN 1
     WHEN p.name = 'Free (Not Logged In)' AND feature_key = 'history_access' THEN 0
     WHEN p.name = 'Free (Not Logged In)' AND feature_key = 'medication_list' THEN 0
+    WHEN p.name = 'Free (Not Logged In)' AND feature_key = 'failed_scan_limit_daily' THEN 2
+    WHEN p.name = 'Free (Not Logged In)' AND feature_key = 'scan_history_limit' THEN 0
+    WHEN p.name = 'Free (Not Logged In)' AND feature_key = 'my_medication_limit' THEN 0
     
     WHEN p.name = 'Free (Logged In)' AND feature_key = 'scan_quota' THEN 10
     WHEN p.name = 'Free (Logged In)' AND feature_key = 'followup_questions' THEN 5
     WHEN p.name = 'Free (Logged In)' AND feature_key = 'history_access' THEN 30
     WHEN p.name = 'Free (Logged In)' AND feature_key = 'medication_list' THEN 5
+    WHEN p.name = 'Free (Logged In)' AND feature_key = 'failed_scan_limit_daily' THEN 3
+    WHEN p.name = 'Free (Logged In)' AND feature_key = 'scan_history_limit' THEN 3
+    WHEN p.name = 'Free (Logged In)' AND feature_key = 'my_medication_limit' THEN 3
     
     WHEN p.name = 'Premium' AND feature_key = 'scan_quota' THEN -1
     WHEN p.name = 'Premium' AND feature_key = 'followup_questions' THEN -1
     WHEN p.name = 'Premium' AND feature_key = 'history_access' THEN -1
     WHEN p.name = 'Premium' AND feature_key = 'medication_list' THEN -1
+    WHEN p.name = 'Premium' AND feature_key = 'failed_scan_limit_daily' THEN 10
+    WHEN p.name = 'Premium' AND feature_key = 'scan_history_limit' THEN 100
+    WHEN p.name = 'Premium' AND feature_key = 'my_medication_limit' THEN 50
   END,
   CASE 
-    WHEN feature_key IN ('scan_quota', 'followup_questions') THEN 'daily'
-    WHEN feature_key IN ('history_access', 'medication_list') THEN 'none'
+    WHEN feature_key IN ('scan_quota', 'followup_questions', 'failed_scan_limit_daily') THEN 'daily'
+    WHEN feature_key IN ('history_access', 'medication_list', 'scan_history_limit', 'my_medication_limit') THEN 'none'
   END
 FROM plan_ids p
 CROSS JOIN (
@@ -678,9 +989,13 @@ CROSS JOIN (
     ('scan_quota'),
     ('followup_questions'),
     ('history_access'),
-    ('medication_list')
+    ('medication_list'),
+    ('failed_scan_limit_daily'),
+    ('scan_history_limit'),
+    ('my_medication_limit')
 ) AS features(feature_key)
-ON CONFLICT (plan_id, feature_key) DO NOTHING;
+ON CONFLICT (plan_id, feature_key) DO UPDATE
+SET value = EXCLUDED.value, refresh_period = EXCLUDED.refresh_period;
 
 -- =====================================================
 -- 9. PERMISSIONS
@@ -700,6 +1015,11 @@ GRANT EXECUTE ON FUNCTION soft_delete_scan_history(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION check_user_entitlement(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION increment_feature_usage(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_quotas(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_scan_history_visibility(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION increment_failed_scan_usage(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION check_medication_limit(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_medication_count_and_limit(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_all_users_scan_history_visibility() TO authenticated;
 
 -- =====================================================
 -- 10. ANALYZE TABLES FOR QUERY OPTIMIZATION
