@@ -1,0 +1,16 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import './index.css'
+import App from './App.jsx';
+import { AuthProvider } from './AuthContext.jsx';
+import { SubscriptionProvider } from './SubscriptionContext.jsx';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <AuthProvider>
+      <SubscriptionProvider>
+        <App />
+      </SubscriptionProvider>
+    </AuthProvider>
+  </React.StrictMode>,
+)
