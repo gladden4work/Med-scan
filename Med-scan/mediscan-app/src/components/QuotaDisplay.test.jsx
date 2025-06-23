@@ -54,7 +54,7 @@ describe('QuotaDisplay', () => {
     expect(screen.getByText('Medication Limit: 2/3')).toBeInTheDocument();
   });
   
-  test('renders history limit correctly', () => {
+  test('renders history limit with new format', () => {
     useSubscription.mockReturnValue({
       getRemainingQuota: vi.fn().mockReturnValue(1),
       getQuotaLimit: vi.fn().mockReturnValue(3),
@@ -63,7 +63,25 @@ describe('QuotaDisplay', () => {
     
     render(<QuotaDisplay featureKey="scan_history_limit" navigateTo={mockNavigateTo} />);
     
-    expect(screen.getByText('History Limit: 1/3')).toBeInTheDocument();
+    expect(screen.getByText('Your History limit is up to recent 3 records')).toBeInTheDocument();
+  });
+  
+  test('renders limit with custom label when provided', () => {
+    useSubscription.mockReturnValue({
+      getRemainingQuota: vi.fn().mockReturnValue(5),
+      getQuotaLimit: vi.fn().mockReturnValue(10),
+      currentPlan: { price: 0 }
+    });
+    
+    render(
+      <QuotaDisplay 
+        featureKey="scan_quota" 
+        customLabel="Remaining Scans"
+        navigateTo={mockNavigateTo}
+      />
+    );
+    
+    expect(screen.getByText(content => content.includes('Remaining Scans') && content.includes('5/10'))).toBeInTheDocument();
   });
   
   test('renders failed scan quota when showFailedScanQuota is true', () => {

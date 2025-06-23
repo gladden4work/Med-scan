@@ -11,13 +11,15 @@ import { useSubscription } from '../SubscriptionContext';
  * @param {string} props.className - Additional CSS classes
  * @param {Function} props.navigateTo - Navigation function from parent component
  * @param {boolean} props.showFailedScanQuota - Whether to show failed scan quota (only for scan_quota)
+ * @param {string} props.customLabel - Optional custom label to override default feature name
  */
 const QuotaDisplay = ({ 
   featureKey,
   showUpgradeButton = true,
   className = '',
   navigateTo,
-  showFailedScanQuota = false
+  showFailedScanQuota = false,
+  customLabel = null
 }) => {
   const { user } = useAuth();
   const { 
@@ -39,20 +41,24 @@ const QuotaDisplay = ({
   // Get user-friendly feature name
   const getFeatureName = () => {
     switch(featureKey) {
-      case 'scan_quota': return 'Scan';
-      case 'my_medication_limit': return 'Medication';
-      case 'medication_list': return 'Medication';
-      case 'followup_questions': return 'Question';
-      case 'scan_history_limit': return 'History';
-      case 'history_access': return 'History';
-      default: return 'Feature';
+      case 'scan_quota': return customLabel || 'Scan';
+      case 'my_medication_limit': return customLabel || 'Medication';
+      case 'medication_list': return customLabel || 'Medication';
+      case 'followup_questions': return customLabel || 'Question';
+      case 'scan_history_limit': return customLabel || 'History';
+      case 'history_access': return customLabel || 'History';
+      default: return customLabel || 'Feature';
     }
   };
   
   return (
     <div className={`flex flex-col ${className}`}>
       <div className="flex items-center text-sm">
-        <span>{getFeatureName()} Limit: {remaining}/{limit}</span>
+        {featureKey === 'scan_history_limit' ? (
+          <span>Your History limit is up to recent {limit} records</span>
+        ) : (
+          <span>{getFeatureName()} Limit: {remaining}/{limit}</span>
+        )}
         
         {/* Show login button for non-authenticated users who have reached their limit */}
         {!user && remaining === 0 && featureKey === 'scan_quota' && (

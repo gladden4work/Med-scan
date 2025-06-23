@@ -181,7 +181,11 @@ const MediScanApp = () => {
     checkEntitlement, 
     incrementUsage, 
     formatQuotaDisplay,
-    getRemainingQuota
+    getRemainingQuota,
+    getRefreshPeriodText,
+    currentPlan,
+    getMedicationCountAndLimit,
+    getQuotaLimit
   } = useSubscription();
   
   const [currentPage, setCurrentPage] = useState('camera');
@@ -195,6 +199,9 @@ const MediScanApp = () => {
   const [previousPage, setPreviousPage] = useState(null); // Track previous page for navigation
   const [isMedicationSaved, setIsMedicationSaved] = useState(false); // Track if current medicine is saved
   const [entitlementError, setEntitlementError] = useState(null); // Track entitlement errors
+  const [medicationCount, setMedicationCount] = useState(0);
+  const [medicationLimit, setMedicationLimit] = useState(0);
+  const isPremium = currentPlan?.price > 0;
 
   // Backend API URL - configurable via environment
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -423,6 +430,11 @@ const MediScanApp = () => {
           // Update state
           setIsMedicationSaved(false);
           console.log('Medication removed from list');
+          
+          // Update medication count
+          const { currentCount, limit } = await getMedicationCountAndLimit();
+          setMedicationCount(currentCount);
+          setMedicationLimit(limit);
         }
       } else {
         // Add to medications
@@ -472,6 +484,11 @@ const MediScanApp = () => {
         // Update state
         setIsMedicationSaved(true);
         console.log('Medication added to list');
+        
+        // Update medication count
+        const { currentCount, limit } = await getMedicationCountAndLimit();
+        setMedicationCount(currentCount);
+        setMedicationLimit(limit);
       }
       
       // Refresh the medications list
@@ -805,6 +822,13 @@ const MediScanApp = () => {
       }
     };
     
+    // Check if medication is saved when component loads
+    useEffect(() => {
+      if (user && medicineData) {
+        checkIfMedicationSaved();
+      }
+    }, [user, medicineData]);
+    
     if (isAnalyzing) {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -950,27 +974,26 @@ const MediScanApp = () => {
               </ul>
             </div>
             <div className="flex gap-4 mt-6">
-              {previousPage !== 'medications' && (
-                <button
-                  onClick={handleAddToMedications}
-                  className={`flex-1 ${isMedicationSaved ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors`}
-                >
-                  {isMedicationSaved ? (
-                    <>
-                      <X className="w-5 h-5" />
-                      <span>Unsave</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-5 h-5" />
-                      <span>Add to My Medications</span>
-                    </>
-                  )}
-                </button>
-              )}
+              {/* Always show Save/Unsave button regardless of previous page */}
+              <button
+                onClick={handleAddToMedications}
+                className={`flex-1 ${isMedicationSaved ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors`}
+              >
+                {isMedicationSaved ? (
+                  <>
+                    <X className="w-5 h-5" />
+                    <span>Unsave</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" />
+                    <span>Add to My Medications</span>
+                  </>
+                )}
+              </button>
               <button
                 onClick={generateShareLink}
-                className={`flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors ${previousPage === 'medications' ? 'w-full' : ''}`}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center space-x-2 transition-colors"
               >
                 <Share2 className="w-5 h-5" />
                 <span>Share</span>
@@ -1225,6 +1248,17 @@ const MediScanApp = () => {
 
   // My Medications Page
   const MedicationsPage = () => {
+    // Fetch medication count and limit when page loads
+    useEffect(() => {
+      const fetchMedicationCount = async () => {
+        const { currentCount, limit } = await getMedicationCountAndLimit();
+        setMedicationCount(currentCount);
+        setMedicationLimit(limit);
+      };
+      
+      fetchMedicationCount();
+    }, [medications.length]); // Re-fetch when medications array changes
+    
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
@@ -1292,9 +1326,13 @@ const MediScanApp = () => {
                     {/* Remove Button */}
                     <div className="px-3 pb-3 flex justify-end">
                       <button
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation(); // Prevent triggering the parent click
-                          removeMedicationFromList(med.id);
+                          await removeMedicationFromList(med.id);
+                          // Update medication count after removing
+                          const { currentCount, limit } = await getMedicationCountAndLimit();
+                          setMedicationCount(currentCount);
+                          setMedicationLimit(limit);
                         }}
                         className="text-xs text-red-600 hover:text-red-800"
                       >
@@ -1307,13 +1345,19 @@ const MediScanApp = () => {
             </>
           )}
           
-          {/* Quota display at the bottom */}
+          {/* Custom quota display showing actual medication count */}
           <div className="py-2 px-4 mt-6 flex justify-center">
-            <QuotaDisplay 
-              featureKey="medication_list"
-              className="text-gray-600"
-              navigateTo={navigateTo}
-            />
+            <div className="flex items-center text-sm text-gray-600">
+              <span>Medication Limit: {medicationCount}/{medicationLimit}</span>
+              {user && !isPremium && (
+                <button 
+                  onClick={() => navigateTo('subscription')}
+                  className="ml-2 px-3 py-1 bg-indigo-500 text-white text-xs rounded-full"
+                >
+                  Upgrade
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1401,7 +1445,7 @@ const MediScanApp = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm">Scan Limit</p>
+                <p className="text-blue-100 text-sm">Remaining Scans</p>
                 <p className="text-2xl font-bold">{formatQuotaDisplay('scan_quota')}</p>
                 <p className="text-blue-100 text-xs">{getRefreshPeriodText('scan_quota')}</p>
               </div>
@@ -1493,6 +1537,8 @@ const MediScanApp = () => {
 
   // Scan History Page Component
   const ScanHistoryPage = () => {
+    const historyLimit = getQuotaLimit('scan_history_limit');
+    
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
@@ -1573,13 +1619,11 @@ const MediScanApp = () => {
             </>
           )}
           
-          {/* Quota display at the bottom */}
+          {/* Updated history limit display */}
           <div className="py-2 px-4 mt-6 flex justify-center">
-            <QuotaDisplay 
-              featureKey="history_access"
-              className="text-gray-600"
-              navigateTo={navigateTo}
-            />
+            <p className="text-sm text-gray-600">
+              Your History limit is up to recent {historyLimit} records
+            </p>
           </div>
         </div>
       </div>
